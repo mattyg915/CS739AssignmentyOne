@@ -13,8 +13,6 @@ dbPath = os.path.join(path, 'kv.db')
 
 
 class HandleRequests(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
-
     def do_GET(self):
         connection = sqlite3.connect(dbPath)
         cursor = connection.cursor()
@@ -26,8 +24,13 @@ class HandleRequests(BaseHTTPRequestHandler):
             cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             result = cursor.fetchone()
 
-            package = {"exists": "yes", "value": result[0]} if result is not None else {"exists": "no", "value": "None"}
+            if result is not None:
+                package = {"exists": "yes", "value": result[0]}
+            else:
+                package = {"exists": "no", "value": "None"}
+
             response = json.dumps(package)
+
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header("Content-Length", str(len(response)))
@@ -51,14 +54,19 @@ class HandleRequests(BaseHTTPRequestHandler):
             query = (key,)
             cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             result = cursor.fetchone()
-            if result is not None:
+            if result is not None and result != value:
+                # don't waste time updating value with same value
                 cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
                 connection.commit()
             else:
                 cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
                 connection.commit()
 
-            package = {"exists": "yes", "former_value": result[0], "new_value": value} if result is not None else {"exists": "no", "former_value": "None", "new_value": value}
+            if result is not None:
+                package = {"exists": "yes", "former_value": result[0], "new_value": value}
+            else:
+                package = {"exists": "no", "former_value": "None", "new_value": value}
+
             response = json.dumps(package)
             self.send_response(200)
             self.send_header('Content-type', 'application/json')

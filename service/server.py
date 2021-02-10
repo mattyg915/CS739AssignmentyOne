@@ -8,7 +8,6 @@ import os
 
 import sqlite3
 
-rec = False
 path = os.path.dirname(os.path.abspath(__file__))
 dbPath = os.path.join(path, 'kv.db')
 

@@ -11,6 +11,7 @@ import sqlite3
 path = os.path.dirname(os.path.abspath(__file__))
 dbPath = os.path.join(path, 'kv.db')
 
+
 class HandleRequests(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -25,11 +26,11 @@ class HandleRequests(BaseHTTPRequestHandler):
             cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             result = cursor.fetchone()
 
-            s = {"is_key_in": "yes", "value": result[0]} if result != None else {"is_key_in": "no", "value": "None"}
+            s = {"is_key_in": "yes", "value": result[0]} if result is not None else {"is_key_in": "no", "value": "None"}
             response = json.dumps(s)
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
-            self.send_header("Content-Length", len(response))
+            self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
             return
@@ -51,19 +52,18 @@ class HandleRequests(BaseHTTPRequestHandler):
             cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
             connection.commit()
 
+
 class Server(ThreadingMixIn, HTTPServer):
-    """Handle requests in a separate thread."""
+    if __name__ == '__main__':
+        ip, port = sys.argv[1], sys.argv[2]
+        connection = sqlite3.connect(dbPath)
+        cursor = connection.cursor()
 
-if __name__ == '__main__':
-    ip, port = sys.argv[1], sys.argv[2]
-    connection = sqlite3.connect(dbPath)
-    cursor = connection.cursor()
+        # make sure we only create the table once
+        cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='records' ''')
+        if cursor.fetchone()[0] == 0:
+            cursor.execute('''CREATE TABLE 'records' (key text, value text)''')
 
-    # make sure we only create the table once
-    cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='records' ''')
-    if cursor.fetchone()[0] == 0:
-        cursor.execute('''CREATE TABLE 'records' (key text, value text)''')
-
-    server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
-    print('Server initializing, reachable at http://{}:{}'.format(ip, port))
-    server.serve_forever()
+        server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
+        print('Server initializing, reachable at http://{}:{}'.format(ip, port))
+        server.serve_forever()

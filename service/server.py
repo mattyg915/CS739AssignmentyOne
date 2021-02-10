@@ -21,13 +21,13 @@ class HandleRequests(BaseHTTPRequestHandler):
         route = urlparse(self.path)
         # handle read request
         if route.path == "/kv739/":
-            k = route.query.split("=")[-1]
-            query = (k,)
+            key = route.query.split("=")[-1]
+            query = (key,)
             cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             result = cursor.fetchone()
 
-            s = {"is_key_in": "yes", "value": result[0]} if result is not None else {"is_key_in": "no", "value": "None"}
-            response = json.dumps(s)
+            package = {"exists": "yes", "value": result[0]} if result is not None else {"exists": "no", "value": "None"}
+            response = json.dumps(package)
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header("Content-Length", str(len(response)))
@@ -48,9 +48,23 @@ class HandleRequests(BaseHTTPRequestHandler):
         if route.path == "/kv739/":
 
             key, value = body['key'], body['value']
+            query = (key,)
+            cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+            result = cursor.fetchone()
+            if result is not None:
+                cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
+                connection.commit()
+            else:
+                cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
+                connection.commit()
 
-            cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
-            connection.commit()
+            package = {"exists": "yes", "former_value": result[0], "new_value": value} if result is not None else {"exists": "no", "former_value": "None", "new_value": value}
+            response = json.dumps(package)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
 
 
 class Server(ThreadingMixIn, HTTPServer):

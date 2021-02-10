@@ -1,6 +1,7 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from socketserver import ThreadingMixIn
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from urllib.parse import urlparse
+from socketserver import ThreadingMixIn
+
 import json
 import sys
 import os
@@ -11,12 +12,12 @@ rec = False
 path = os.path.dirname(os.path.abspath(__file__))
 dbPath = os.path.join(path, 'kv.db')
 
-class RequestHandler(BaseHTTPRequestHandler):
+class HandleRequests(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    connection = sqlite3.connect(dbPath)
-    cursor = connection.cursor()
 
     def do_GET(self):
+        connection = sqlite3.connect(dbPath)
+        cursor = connection.cursor()
         route = urlparse(self.path)
         # handle read request
         if route.path == "/kv739/":
@@ -35,6 +36,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             return
 
     def do_POST(self):
+        connection = sqlite3.connect(dbPath)
+        cursor = connection.cursor()
         content_len = int(self.headers.get('Content-Length'))
         post_body = self.rfile.read(content_len)
 
@@ -62,6 +65,6 @@ if __name__ == '__main__':
     if cursor.fetchone()[0] == 0:
         cursor.execute('''CREATE TABLE 'records' (key text, value text)''')
 
-    server = HTTPServer((ip, int(port)), RequestHandler)
-    print('Server initalizing, reachable at http://{}:{}'.format(ip, port))
+    server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
+    print('Server initializing, reachable at http://{}:{}'.format(ip, port))
     server.serve_forever()

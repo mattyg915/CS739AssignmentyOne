@@ -1,0 +1,29 @@
+// For CS739 project 1 KV store
+
+syntax = "proto3";
+
+package keyvaluestore;
+
+// A simple key-value storage service
+service KeyValueStore {
+  // Provides a value for each get request
+  rpc GetValue (GetRequest) returns (Response) {}
+  // Returns the old value (default null) for each put request
+  rpc PutValue (PutRequest) returns (Response) {}
+}
+
+// The get request message containing the key
+message GetRequest {
+  string key = 1;
+}
+
+// The set request message containing the key and the value
+message PutRequest {
+  string key = 1;
+  string newvalue = 2;
+}
+
+// The response message containing the value associated with the key
+message Response {
+  string value = 1;
+}

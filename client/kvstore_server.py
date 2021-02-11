@@ -12,9 +12,9 @@ import keyvaluestore_pb2_grpc
 class KeyValueStore(keyvaluestore_pb2_grpc.KeyValueStoreServicer):
 
     def GetValue(self, request, context):
-        return helloworld_pb2.HelloReply(message='Hello, get received %s!' % request.name)
-    def SetValue(self, request, context):
-        return helloworld_pb2.HelloReply(message='Hello, set received %s!' % request.name)
+        return keyvaluestore_pb2.Response(value='Get received: %s-%s!' % (request.key, 'value'))
+    def PutValue(self, request, context):
+        return keyvaluestore_pb2.Response(value='Set received: %s-%s!' % (request.key, request.newvalue))
 
 
 def serve():

@@ -49,23 +49,32 @@ class HandleRequests(BaseHTTPRequestHandler):
         route = urlparse(self.path)
         # direct write request
         if route.path == "/kv739/":
+            value = None
+            if 'value' in body:
+                value = body['value']
 
-            key, value = body['key'], body['value']
+            key = body['key']
             query = (key,)
             cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             result = cursor.fetchone()
-            if result is not None and result != value:
-                # don't waste time updating value with same value
-                cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
-                connection.commit()
+            if value is None:
+                if result is not None:
+                    package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
+                else:
+                    package = {"exists": "no", "former_value": "None", "new_value": "[]"}
             else:
-                cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
-                connection.commit()
+                if result is not None and result[0] != value:
+                    # don't waste time updating value with same value
+                    cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
+                    connection.commit()
+                else:
+                    cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
+                    connection.commit()
 
-            if result is not None:
-                package = {"exists": "yes", "former_value": result[0], "new_value": value}
-            else:
-                package = {"exists": "no", "former_value": "None", "new_value": value}
+                if result is not None:
+                    package = {"exists": "yes", "former_value": result[0], "new_value": value}
+                else:
+                    package = {"exists": "no", "former_value": "None", "new_value": value}
 
             response = json.dumps(package)
             self.send_response(200)

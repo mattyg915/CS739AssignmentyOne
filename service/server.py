@@ -57,11 +57,11 @@ class HandleRequests(BaseHTTPRequestHandler):
             query = (key,)
             cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             result = cursor.fetchone()
-            if value is None:
+            if body['method'] == 'get':
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
                 else:
-                    package = {"exists": "no", "former_value": "None", "new_value": "[]"}
+                    package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
             else:
                 if result is not None and result[0] != value:
                     # don't waste time updating value with same value
@@ -74,7 +74,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": value}
                 else:
-                    package = {"exists": "no", "former_value": "None", "new_value": value}
+                    package = {"exists": "no", "former_value": "[]", "new_value": value}
 
             response = json.dumps(package)
             self.send_response(200)

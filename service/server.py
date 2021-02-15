@@ -18,6 +18,10 @@ cache_size = 0
 cache = OrderedDict()
 
 class HandleRequests(BaseHTTPRequestHandler):
+    # disable logging
+    def log_message(self, format, *args):
+        return
+
     def do_GET(self):
         connection = sqlite3.connect(dbPath)
         cursor = connection.cursor()

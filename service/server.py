@@ -77,7 +77,19 @@ class HandleRequests(BaseHTTPRequestHandler):
     #         return
 
     def do_POST(self):
-        connection = sqlite3.connect(dbPath)
+        try:
+            connection = sqlite3.connect(dbPath)
+        except Exception:
+            package = {"error": "error opening database connection"}
+            response = json.dumps(package)
+
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+            return
+
         cursor = connection.cursor()
         content_len = int(self.headers.get('Content-Length'))
         post_body = self.rfile.read(content_len)
@@ -147,13 +159,35 @@ class HandleRequests(BaseHTTPRequestHandler):
                     result = [cache[key]]
                     cache_hit = True
                 else:
-                    cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
-                    result = cursor.fetchone()
-                    cache_hit = False
+                    try:
+                        cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                        result = cursor.fetchone()
+                        cache_hit = False
+                    except Exception:
+                        package = {"error": "Internal server error"}
+                        response = json.dumps(package)
+
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+                        return
 
             else:
-                cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
-                result = cursor.fetchone()
+                try:
+                    cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                    result = cursor.fetchone()
+                except Exception:
+                    package = {"error": "Internal server error"}
+                    response = json.dumps(package)
+
+                    self.send_response(500)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header("Content-Length", str(len(response)))
+                    self.end_headers()
+                    self.wfile.write(response.encode())
+                    return
 
             #cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             #result = cursor.fetchone()
@@ -173,18 +207,35 @@ class HandleRequests(BaseHTTPRequestHandler):
             else:
                 if result is not None and result[0] != value:
                     # don't waste time updating value with same value
-                    #print (result, value)
-                    #cache.pop(key)
-                    cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
-                    connection.commit()
-                    # update the cache
-                    cache[key] = value
+                    try:
+                        cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
+                        connection.commit()
+                        # update the cache
+                        cache[key] = value
+                    except Exception:
+                        package = {"error": "Internal server error"}
+                        response = json.dumps(package)
+
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+                        return
                 else:
-                    cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
-                    cache[key] = value
-                    print ("Printing cache contents")
-                    print (cache)
-                    connection.commit()
+                    try:
+                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
+                        connection.commit()
+                    except Exception:
+                        package = {"error": "Internal server error"}
+                        response = json.dumps(package)
+
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+                        return
 
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": value}

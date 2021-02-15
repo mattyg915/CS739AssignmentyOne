@@ -9,6 +9,7 @@ To gen trace
 
 To send generated db to server
 ```
+gcc -o test_prog perftest.c -L. -l:lib739kv.so
 ./test_prog db.lst
 ```
 Default server connection at localhost:5000

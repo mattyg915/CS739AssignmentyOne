@@ -2,13 +2,13 @@ package main
 
 import (
 	"C"
-	"github.com/valyala/fasthttp"
-	"unsafe"
 	"encoding/json"
-	"fmt"
 	"errors"
-	"strings"
+	"fmt"
+	"github.com/valyala/fasthttp"
 	"strconv"
+	"strings"
+	"unsafe"
 )
 
 var server string
@@ -19,9 +19,9 @@ var strPost = []byte("POST")
 var strGet = []byte("GET")
 
 type KeyValue struct {
-	Exists string `json:"exists"`
+	Exists      string `json:"exists"`
 	FormerValue string `json:"former_value"`
-	NewValue string `json:"new_value"`
+	NewValue    string `json:"new_value"`
 }
 
 //export kv739_init
@@ -67,12 +67,12 @@ func validateKey(key string) error {
 	}
 
 	f := func(r rune) bool {
-                if r < 'A' || r > 'z' {
-                        return r < '0' || r > '9'
-                } else {
-                        return false
-                }
-        }
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			return false
+		} else {
+			return true
+		}
+	}
 
 	if strings.IndexFunc(key, f) != -1 {
 		return errors.New("Special character in key")
@@ -87,16 +87,16 @@ func validateValue(value string) error {
 	}
 
 	f := func(r rune) bool {
-                if r < 'A' || r > 'z' {
-			return r < '0' || r > '9'
-		} else {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
 			return false
+		} else {
+			return true
 		}
-        }
+	}
 
 	if strings.IndexFunc(value, f) != -1 {
-                return errors.New("Special character in value")
-        }
+		return errors.New("Special character in value")
+	}
 
 	return nil
 }
@@ -138,8 +138,8 @@ func kv739_get(key *C.char, value *C.char) int32 {
 	}
 
 	valuePtr := unsafe.Pointer(value)
-        //Convert pointer into a slice
-        cBuf := (*[2049]byte)(valuePtr)
+	//Convert pointer into a slice
+	cBuf := (*[2049]byte)(valuePtr)
 
 	if kv.Exists == "yes" {
 		// := json.Unmarshal(res.Body(), &kv)
@@ -178,41 +178,40 @@ func kv739_put(key *C.char, value *C.char, old_value *C.char) int32 {
 
 	reqJSON, _ := json.Marshal(m)
 
-        req := fasthttp.AcquireRequest()
-        req.SetBody(reqJSON)
-        req.Header.SetMethodBytes(strPost)
-        req.Header.SetContentType("application/json")
-        req.SetRequestURIBytes([]byte(get_path))
+	req := fasthttp.AcquireRequest()
+	req.SetBody(reqJSON)
+	req.Header.SetMethodBytes(strPost)
+	req.Header.SetContentType("application/json")
+	req.SetRequestURIBytes([]byte(get_path))
 
-        res := fasthttp.AcquireResponse()
-        err = fastclient.Do(req, res)
-        if err != nil {
-                fmt.Println("Request Error:", err)
-                return -1
-        }
+	res := fasthttp.AcquireResponse()
+	err = fastclient.Do(req, res)
+	if err != nil {
+		fmt.Println("Request Error:", err)
+		return -1
+	}
 
-        println(string(res.Body()))
+	println(string(res.Body()))
 	var kv KeyValue
-        err = json.Unmarshal(res.Body(), &kv)
-        if err != nil {
-                fmt.Println("Json Unmarshal Error:", err)
-                return -1
-        }
+	err = json.Unmarshal(res.Body(), &kv)
+	if err != nil {
+		fmt.Println("Json Unmarshal Error:", err)
+		return -1
+	}
 
-        valuePtr := unsafe.Pointer(old_value)
-        //Convert pointer into a slice
-        cBuf := (*[2049]byte)(valuePtr)
+	valuePtr := unsafe.Pointer(old_value)
+	//Convert pointer into a slice
+	cBuf := (*[2049]byte)(valuePtr)
 
 	if kv.Exists == "yes" {
 		b := kv.FormerValue
-                copy(cBuf[:], []byte(b))
-                cBuf[len(b)] = 0x0
-                return 0
+		copy(cBuf[:], []byte(b))
+		cBuf[len(b)] = 0x0
+		return 0
 	} else {
 		cBuf[0] = 0x0
 		return 1
 	}
 }
 
-
-func main() { } 
+func main() {}

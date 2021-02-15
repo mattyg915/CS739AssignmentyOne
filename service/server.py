@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from urllib.parse import urlparse
 from socketserver import ThreadingMixIn
@@ -62,6 +63,13 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             return
+        else:
+            self.send_response(200)
+            #self.send_header('Content-type', 'application/json')
+            self.send_header("Content-Length", str(len("helloworld")))
+            self.end_headers()
+            self.wfile.write("helloworld".encode())
+            return
 
     def do_POST(self):
         connection = sqlite3.connect(dbPath)
@@ -80,23 +88,50 @@ class HandleRequests(BaseHTTPRequestHandler):
 
             key = body['key']
             query = (key,)
-            cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
-            result = cursor.fetchone()
+            cache_hit = False
+
+            if caching:
+                if key in cache.keys():
+                    result = [cache[key]]
+                    cache_hit = True
+                else:
+                    cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                    result = cursor.fetchone()
+                    cache_hit = False
+
+            else:
+                cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                result = cursor.fetchone()
+
+            #cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+            #result = cursor.fetchone()
             if body['method'] == 'get':
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
+                    if caching and not cache_hit:
+                        # cache is FIFO
+                        if len(cache.keys()) > cache_size:
+                            cache.popitem(last=False)
+                            cache[key] = result
+                        else:
+                            cache[key] = result
+
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
             else:
                 if result is not None and result[0] != value:
                     # don't waste time updating value with same value
-                    cache.pop(key)
+                    #print (result, value)
+                    #cache.pop(key)
                     cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
                     connection.commit()
                     # update the cache
-                    cache[key] = result[0]
+                    cache[key] = value
                 else:
                     cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
+                    cache[key] = value
+                    print ("Printing cache contents")
+                    print (cache)
                     connection.commit()
 
                 if result is not None:

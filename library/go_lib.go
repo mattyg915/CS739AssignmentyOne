@@ -128,7 +128,7 @@ func kv739_get(key *C.char, value *C.char) int32 {
 		fmt.Println("error:", err)
 		return -1
 	}
-	println(string(res.Body()))
+	//println(string(res.Body()))
 
 	var kv KeyValue
 	err = json.Unmarshal(res.Body(), &kv)
@@ -191,7 +191,7 @@ func kv739_put(key *C.char, value *C.char, old_value *C.char) int32 {
 		return -1
 	}
 
-	println(string(res.Body()))
+	//println(string(res.Body()))
 	var kv KeyValue
 	err = json.Unmarshal(res.Body(), &kv)
 	if err != nil {

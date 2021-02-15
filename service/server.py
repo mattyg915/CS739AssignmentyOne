@@ -46,7 +46,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 if caching and not cache_hit:
                     # cache is FIFO
                     if len(cache.keys()) > 250:
-                        del cache[cache.keys()[0]]
+                        cache.popitem(last=False)
                         cache[key] = result
                     else:
                         cache[key] = result

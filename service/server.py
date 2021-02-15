@@ -84,7 +84,19 @@ class HandleRequests(BaseHTTPRequestHandler):
 
         decoded_body = post_body.decode()
         body = json.loads(decoded_body)
-        route = urlparse(self.path)
+        try:
+            route = urlparse(self.path)
+        except UnicodeEncodeError:
+            package = {"error": "error parsing POST body"}
+            response = json.dumps(package)
+
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+            return
+
         # direct write request
         if route.path == "/kv739/":
             value = None
@@ -104,6 +116,31 @@ class HandleRequests(BaseHTTPRequestHandler):
             method = body['method']
             query = (key,)
             cache_hit = False
+
+            # validate strings
+            try:
+                key.encode('ASCII')
+                value.encode('ASCII')
+            except UnicodeEncodeError:
+                package = {"error": "invalid char in body"}
+                response = json.dumps(package)
+
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
+                return
+            if '[' in key or '[' in value or ']' in key or ']' in value:
+                package = {"error": "invalid char in body"}
+                response = json.dumps(package)
+
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
+                return
 
             if caching:
                 if key in cache.keys():

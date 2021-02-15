@@ -22,58 +22,59 @@ class HandleRequests(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
-    def do_GET(self):
-        connection = sqlite3.connect(dbPath)
-        cursor = connection.cursor()
-        route = urlparse(self.path)
-        # handle read request
-        if route.path == "/kv739/":
-            key = route.query.split("=")[-1]
-            query = (key,)
-            cache_hit = False
-
-            # if caching enabled check the cache
-            if caching:
-                if key in cache.keys():
-                    result = [cache[key]]
-                    cache_hit = True
-                else:
-                    cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
-                    result = cursor.fetchone()
-                    cache_hit = False
-
-            else:
-                cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
-                result = cursor.fetchone()
-
-            if result is not None:
-                package = {"exists": "yes", "value": result[0]}
-
-                if caching and not cache_hit:
-                    # cache is FIFO
-                    if len(cache.keys()) > 250:
-                        cache.popitem(last=False)
-                        cache[key] = result
-                    else:
-                        cache[key] = result
-            else:
-                package = {"exists": "no", "value": "None"}
-
-            response = json.dumps(package)
-
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.send_header("Content-Length", str(len(response)))
-            self.end_headers()
-            self.wfile.write(response.encode())
-            return
-        else:
-            self.send_response(200)
-            #self.send_header('Content-type', 'application/json')
-            self.send_header("Content-Length", str(len("helloworld")))
-            self.end_headers()
-            self.wfile.write("helloworld".encode())
-            return
+    # all requests handled via POST
+    # def do_GET(self):
+    #     connection = sqlite3.connect(dbPath)
+    #     cursor = connection.cursor()
+    #     route = urlparse(self.path)
+    #     # handle read request
+    #     if route.path == "/kv739/":
+    #         key = route.query.split("=")[-1]
+    #         query = (key,)
+    #         cache_hit = False
+    #
+    #         # if caching enabled check the cache
+    #         if caching:
+    #             if key in cache.keys():
+    #                 result = [cache[key]]
+    #                 cache_hit = True
+    #             else:
+    #                 cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+    #                 result = cursor.fetchone()
+    #                 cache_hit = False
+    #
+    #         else:
+    #             cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+    #             result = cursor.fetchone()
+    #
+    #         if result is not None:
+    #             package = {"exists": "yes", "value": result[0]}
+    #
+    #             if caching and not cache_hit:
+    #                 # cache is FIFO
+    #                 if len(cache.keys()) > 250:
+    #                     cache.popitem(last=False)
+    #                     cache[key] = result
+    #                 else:
+    #                     cache[key] = result
+    #         else:
+    #             package = {"exists": "no", "value": "None"}
+    #
+    #         response = json.dumps(package)
+    #
+    #         self.send_response(200)
+    #         self.send_header('Content-type', 'application/json')
+    #         self.send_header("Content-Length", str(len(response)))
+    #         self.end_headers()
+    #         self.wfile.write(response.encode())
+    #         return
+    #     else:
+    #         self.send_response(200)
+    #         #self.send_header('Content-type', 'application/json')
+    #         self.send_header("Content-Length", str(len("helloworld")))
+    #         self.end_headers()
+    #         self.wfile.write("helloworld".encode())
+    #         return
 
     def do_POST(self):
         connection = sqlite3.connect(dbPath)
@@ -87,10 +88,20 @@ class HandleRequests(BaseHTTPRequestHandler):
         # direct write request
         if route.path == "/kv739/":
             value = None
-            if 'value' in body:
-                value = body['value']
+            if 'value' not in body or 'method' not in body or 'key' not in body:
+                package = {"error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
+                response = json.dumps(package)
 
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
+                return
+
+            value = body['value']
             key = body['key']
+            method = body['method']
             query = (key,)
             cache_hit = False
 
@@ -109,7 +120,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
             #cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             #result = cursor.fetchone()
-            if body['method'] == 'get':
+            if method == 'get':
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
                     if caching and not cache_hit:

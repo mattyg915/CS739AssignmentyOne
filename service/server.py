@@ -92,15 +92,14 @@ class HandleRequests(BaseHTTPRequestHandler):
                     # don't waste time updating value with same value
                     cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
                     connection.commit()
+                    # update the cache
+                    cache[key] = result[0]
                 else:
                     cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
                     connection.commit()
 
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": value}
-
-                    # update the cache
-                    cache[key] = result[0]
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
 

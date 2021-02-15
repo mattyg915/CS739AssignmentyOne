@@ -7,22 +7,34 @@ const char delim[2] = "[";
 const size_t keylenMax=128;
 const size_t vallenMax=2048;
 
-static void split_kv(char * line, char* key, char* val) {
+static void split_kv(char * line) {
+    
+    char* key = NULL;
+    char* val = NULL;
+	char value[2049];
+        
     char* token = strtok(line, delim);
     //token = strtok(NULL, delim, &state2);
     while( token != NULL ) {
       if (key == NULL) {
           key = strdup(token);
-          printf( " key: %s\n", key );
+          //printf( " key: %s\n", key );
           token = strtok(NULL, delim);
       }
       else {
           val = strdup(token);
-          printf( " value: %s\n", val );
+          val[strcspn(val, "\n")] = 0;
+          //printf( " value: %s\n", val );
           token = strtok(NULL, delim);
       }
     }
+    printf( " key: %s\n", key );
+    printf( " value: %s\n", val );
     
+    if (kv739_put(key, val, value) >= 0)
+        printf("Value inserted\n");
+    if (kv739_get(key, value) == 0)
+        printf("%s\n", value);
     /*char *state1, *state2;
     char *token = strtok_r(line, delim, &state1);
     while(token){
@@ -36,6 +48,8 @@ static void split_kv(char * line, char* key, char* val) {
         free(current_string);
         break;
     }*/
+    free(key);
+    free(val);
 }
 
 int main( int argc, char *argv[] )
@@ -51,7 +65,6 @@ int main( int argc, char *argv[] )
     
     
 	kv739_init("127.0.0.1:5000");
-	char value[2049];
 	printf("Putting Value now!\n");
 
 	
@@ -62,17 +75,16 @@ int main( int argc, char *argv[] )
         
         //char * key [keylenMax+1];
         //char * val [vallenMax+1];
-        char* key = NULL;
-        char* val = NULL;
-        split_kv(line, key, val);
+        split_kv(line);
         
-        if (kv739_put(key, val, value) >= 0)
-		printf("Value inserted\n");
+        //printf( " val: %s\n", val );
+        
+        /*if (kv739_put(key, val, value) >= 0)
+            printf("Value inserted\n");
         if (kv739_get(key, value) == 0)
-            printf("%s\n", value);
+            printf("%s\n", value);*/
         
-        free(key);
-        free(val);
+
         //printf("key: %s\n", key);
         //printf("val: %s\n\n", val);
     }

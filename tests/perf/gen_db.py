@@ -17,7 +17,7 @@ def main():
     f_key = open(args.out+'_key.lst', 'wb')
     f = open(args.out+'.lst', 'wb')
     #setup key value space
-    kvspace=string.punctuation+string.digits+string.ascii_letters#+' '+'\t'
+    kvspace=string.digits+string.ascii_letters#+string.punctuation#+' '+'\t'
     kvspace=kvspace.replace('[', '').replace(']', '')
     print(kvspace)
 

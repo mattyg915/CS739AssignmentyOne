@@ -13,6 +13,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 dbPath = os.path.join(path, 'kv.db')
 
 caching = False
+cache_size = 0
 cache = OrderedDict()
 
 class HandleRequests(BaseHTTPRequestHandler):
@@ -113,12 +114,13 @@ class HandleRequests(BaseHTTPRequestHandler):
 
 class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
-        ip, port, enable_cache = sys.argv[1], sys.argv[2], sys.argv[3]
+        ip, port, enable_cache, size = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
         connection = sqlite3.connect(dbPath)
         cursor = connection.cursor()
 
         if enable_cache == "--cache":
             caching = True
+            cache_size = int(size)
 
         # make sure we only create the table once
         cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='records' ''')

@@ -90,6 +90,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             else:
                 if result is not None and result[0] != value:
                     # don't waste time updating value with same value
+                    cache.pop(key)
                     cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
                     connection.commit()
                     # update the cache

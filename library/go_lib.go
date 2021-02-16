@@ -148,6 +148,17 @@ func kv739_get(key *C.char, value *C.char) int32 {
 		fmt.Println("error:", err)
 		return -1
 	}
+
+	if res.StatusCode() == 400 {
+		fmt.Println("Request Error: Invalid Input")
+		return -1
+	}
+
+	if res.StatusCode() == 500 {
+		fmt.Println("Request Error: SQL Error")
+		return -1
+	}
+
 	//println(string(res.Body()))
 
 	var kv KeyValue
@@ -212,6 +223,16 @@ func kv739_put(key *C.char, value *C.char, old_value *C.char) int32 {
 	err = fastclient.Do(req, res)
 	if err != nil {
 		fmt.Println("Request Error:", err)
+		return -1
+	}
+
+	if res.StatusCode() == 400 {
+		fmt.Println("Request Error: Invalid Input")
+		return -1
+	}
+
+	if res.StatusCode() == 500 {
+		fmt.Println("Request Error: SQL Error")
 		return -1
 	}
 

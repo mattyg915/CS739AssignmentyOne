@@ -113,7 +113,7 @@ class HandleRequests(BaseHTTPRequestHandler):
         # direct write request
         if route.path == "/kv739/":
             value = None
-            if 'value' not in body or 'method' not in body or 'key' not in body:
+            if 'method' not in body or 'key' not in body:
                 package = {"error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
                 response = json.dumps(package)
 
@@ -124,16 +124,27 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.wfile.write(response.encode())
                 return
 
-            value = body['value']
             key = body['key']
             method = body['method']
+
+            if method != 'get' and 'value' not in body:
+                package = {
+                    "error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
+                response = json.dumps(package)
+
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
+                return
+
             query = (key,)
             cache_hit = False
 
             # validate strings
             try:
                 key.encode('ASCII')
-                value.encode('ASCII')
             except UnicodeEncodeError:
                 package = {"error": "invalid char in body"}
                 response = json.dumps(package)
@@ -144,7 +155,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(response.encode())
                 return
-            if '[' in key or '[' in value or ']' in key or ']' in value:
+            if '[' in key or ']' in key:
                 package = {"error": "invalid char in body"}
                 response = json.dumps(package)
 
@@ -206,6 +217,30 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
             else:
+                value = body['value']
+                # validate strings
+                try:
+                    value.encode('ASCII')
+                except UnicodeEncodeError:
+                    package = {"error": "invalid char in body"}
+                    response = json.dumps(package)
+
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header("Content-Length", str(len(response)))
+                    self.end_headers()
+                    self.wfile.write(response.encode())
+                    return
+                if '[' in value or ']' in value:
+                    package = {"error": "invalid char in body"}
+                    response = json.dumps(package)
+
+                    self.send_response(400)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header("Content-Length", str(len(response)))
+                    self.end_headers()
+                    self.wfile.write(response.encode())
+                    return
                 if result is not None and result[0] != value:
                     # don't waste time updating value with same value
                     try:

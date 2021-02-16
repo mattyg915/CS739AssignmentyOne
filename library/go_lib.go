@@ -17,6 +17,7 @@ var put_path string
 var fastclient *fasthttp.Client
 var strPost = []byte("POST")
 var strGet = []byte("GET")
+var has_init = int(0)
 
 type KeyValue struct {
 	Exists      string `json:"exists"`
@@ -38,11 +39,16 @@ func kv739_init(server_name *C.char) int32 {
 
 	get_path = "http://" + server + "/kv739/"
 	put_path = "http://" + server + "/kv739/"
+	has_init = 1
 	return 0
 }
 
 //export kv739_shutdown
 func kv739_shutdown() int32 {
+	if has_init == 0 {
+		return -1
+	}
+	has_init = 0
 	fastclient.CloseIdleConnections()
 	return 0
 }
@@ -67,7 +73,12 @@ func validateKey(key string) error {
 	}
 
 	f := func(r rune) bool {
-		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+
+		if r == '[' || r == ']' {
+			return true
+		}
+
+		if r >= 32 && r <= 126 {
 			return false
 		} else {
 			return true
@@ -87,7 +98,12 @@ func validateValue(value string) error {
 	}
 
 	f := func(r rune) bool {
-		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+
+		if r == '[' || r == ']' {
+			return true
+		}
+
+		if r >= 32 && r <= 126 {
 			return false
 		} else {
 			return true
@@ -103,6 +119,10 @@ func validateValue(value string) error {
 
 //export kv739_get
 func kv739_get(key *C.char, value *C.char) int32 {
+	if has_init == 0 {
+		return -1
+	}
+
 	k := C.GoString(key)
 
 	err := validateKey(k)
@@ -128,6 +148,17 @@ func kv739_get(key *C.char, value *C.char) int32 {
 		fmt.Println("error:", err)
 		return -1
 	}
+
+	if res.StatusCode() == 400 {
+		fmt.Println("Request Error: Invalid Input")
+		return -1
+	}
+
+	if res.StatusCode() == 500 {
+		fmt.Println("Request Error: SQL Error")
+		return -1
+	}
+
 	//println(string(res.Body()))
 
 	var kv KeyValue
@@ -156,6 +187,10 @@ func kv739_get(key *C.char, value *C.char) int32 {
 
 //export kv739_put
 func kv739_put(key *C.char, value *C.char, old_value *C.char) int32 {
+	if has_init == 0 {
+		return -1
+	}
+
 	k := C.GoString(key)
 	val := C.GoString(value)
 
@@ -188,6 +223,16 @@ func kv739_put(key *C.char, value *C.char, old_value *C.char) int32 {
 	err = fastclient.Do(req, res)
 	if err != nil {
 		fmt.Println("Request Error:", err)
+		return -1
+	}
+
+	if res.StatusCode() == 400 {
+		fmt.Println("Request Error: Invalid Input")
+		return -1
+	}
+
+	if res.StatusCode() == 500 {
+		fmt.Println("Request Error: SQL Error")
 		return -1
 	}
 

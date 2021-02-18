@@ -30,15 +30,17 @@ def main():
     parser.add_argument('-d', '--distribution', dest='distribution', help="distribution from: zipf, uniform, sequential, latest", required=True)
     parser.add_argument('-r', '--read', dest='read_percent', type=int, help="read percentile from 0 to 100. Write percentile will be 100-read percentile", required=True)
     parser.add_argument('-a', '--alpha', dest='alpha', type=int, default=100, help="alpha value for zipf distribution")
+    parser.add_argument('-k', '--keyfile', dest='keyfile', type=argparse.FileType('r', encoding='ascii'), help="key file name containing all files in the db", required=True)
     parser.add_argument('-o', '--out', dest='out', type=argparse.FileType('w', encoding='ascii'), help="output file name", required=True)
     parser.add_argument('-n', '--number', dest='n', type=int, help="number of requests in 100s, i.e. n=10 means 1k requests", required=True)
     args = parser.parse_args()
     print(args)
     
     if (args.distribution='zipf'):
-        for i in range(0,args.n):
-            args.out.write('abcd')
+        #for i in range(0,args.n):
+        #    args.out.write('abcd')
     elif (args.distribution='uniform'):
+        
     elif (args.distribution='sequential'):
     elif (args.distribution='latest'):
     else:

@@ -130,8 +130,8 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
                     cache[key] = value
-                    print ("Printing cache contents")
-                    print (cache)
+                    #print ("Printing cache contents")
+                    #print (cache)
                     connection.commit()
 
                 if result is not None:

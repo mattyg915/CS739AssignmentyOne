@@ -38,10 +38,10 @@ def main():
     #print(str(len(values))+' values created...')
         
     for i in range(0, args.n*100):
-        req = keys[i] + '['+values[i]+'\n'
+        record = keys[i] + '['+values[i]+'\n'
         
         f_key.write((keys[i]+'\n').encode('ascii'))
-        f.write(req.encode('ascii'))
+        f.write(record.encode('ascii'))
     
     #close files
     f.close()

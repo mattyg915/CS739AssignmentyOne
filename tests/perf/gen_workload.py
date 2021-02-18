@@ -3,9 +3,11 @@ import bisect
 import math
 
 import argparse
-from functools import reduce
 
 latest_percentile = 90
+# reads are 0s, writes are 1s
+read = 0
+write = 1
 
 class ZipfGenerator: 
 
@@ -24,9 +26,12 @@ class ZipfGenerator:
         # Translate the Zipf variable: 
         return bisect.bisect(self.distMap, u) - 1
 
+def get_keys(fp):
+    keys = []
+    lines = [line for line in fp.readlines()]
+    return lines
 
 def main():
-    print("hi")
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--distribution', dest='distribution', help="distribution from: zipf, uniform, sequential, latest", required=True)
     parser.add_argument('-r', '--read', dest='read_percent', type=int, help="read percentile from 0 to 100. Write percentile will be 100-read percentile", required=True)
@@ -37,18 +42,34 @@ def main():
     args = parser.parse_args()
     print(args)
     
-    if (args.distribution='zipf'):
+    #get keys
+    keys = get_keys(args.keyfile)
+    queries = [None] * args.n * 100
+    #print(keys)
+    
+    if (args.distribution=='zipf'):
+        print("generating zipfan distribution...")
         #for i in range(0,args.n):
         #    args.out.write('abcd')
-    elif (args.distribution='uniform'):
-        
-    elif (args.distribution='sequential'):
-    elif (args.distribution='latest'):
+    elif (args.distribution=='uniform'):
+        print("generating uniform distribution...")
+        for i in range(0, args.n*100):
+            j = random.randint(0,len(keys)-1)
+            req_type = int(random.randint(0,100) >= args.read_percent)
+            queries[i] = str(req_type)+'['+keys[j]
+        for i in range(0, args.n*100):
+            args.out.write(queries[i])
+            
+    elif (args.distribution=='sequential'):
+        print("generating sequential distribution...")
+        #for i in range(0, args.n*100):
+    elif (args.distribution=='latest'):
+        print("generating latest distribution...")
     else:
-        print('invalid distribution')
+        print('invalid distribution...')
     
     
-    args.out.write('abcd')
+    #args.out.write('abcd')
     args.out.close()
 
 

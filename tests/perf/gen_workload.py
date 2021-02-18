@@ -3,6 +3,7 @@ import bisect
 import math
 
 import argparse
+from functools import reduce
 
 latest_percentile = 90
 

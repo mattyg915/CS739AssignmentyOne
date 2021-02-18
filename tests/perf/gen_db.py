@@ -17,18 +17,30 @@ def main():
     f_key = open(args.out+'_key.lst', 'wb')
     f = open(args.out+'.lst', 'wb')
     #setup key value space
-    kvspace=string.digits+string.ascii_letters#+string.punctuation#+' '+'\t'
+    kvspace=string.digits+string.ascii_letters+string.punctuation#+' '+'\t'
     kvspace=kvspace.replace('[', '').replace(']', '')
     print(kvspace)
 
     #generate DB
+    keys = [None] * args.n*100
+    values = [None] * args.n*100
     for i in range(0, args.n*100):
-        key = ''.join(random.choices(kvspace, k = random.randint(1,keylenMax)))
-        value = ''.join(random.choices(kvspace, k = random.randint(1,vallenMax))) 
+        key = None
+        while key in keys:
+            key = ''.join(random.choices(kvspace, k = random.randint(1,keylenMax)))
+        keys[i] = key
         
-        req = key + '['+value+'\n'
+        '''value = None
+        while value in values:
+            value = ''.join(random.choices(kvspace, k = random.randint(1,vallenMax)))'''
+        values[i] = ''.join(random.choices(kvspace, k = random.randint(1,vallenMax)))
+    #print(str(len(keys))+' keys created...')
+    #print(str(len(values))+' values created...')
         
-        f_key.write((key+'\n').encode('ascii'))
+    for i in range(0, args.n*100):
+        req = keys[i] + '['+values[i]+'\n'
+        
+        f_key.write((keys[i]+'\n').encode('ascii'))
         f.write(req.encode('ascii'))
     
     #close files

@@ -14,6 +14,8 @@ import (
 var server string
 var get_path string
 var put_path string
+var health_path string
+
 var fastclient *fasthttp.Client
 var strPost = []byte("POST")
 var strGet = []byte("GET")
@@ -39,8 +41,38 @@ func kv739_init(server_name *C.char) int32 {
 
 	get_path = "http://" + server + "/kv739/"
 	put_path = "http://" + server + "/kv739/"
-	has_init = 1
-	return 0
+	health_path = "http://" + server + "/health/"
+
+	if err := doConnectionTest(); err == nil {
+		has_init = 1
+		return 0
+	} else {
+		fmt.Println("Init Connection error: ", err)
+		return -1
+	}
+}
+
+func doConnectionTest() error {
+
+	req := fasthttp.AcquireRequest()
+	//req.SetBody()
+	req.Header.SetMethodBytes(strGet)
+	req.Header.SetContentType("text/plain")
+	req.SetRequestURIBytes([]byte(health_path))
+
+	res := fasthttp.AcquireResponse()
+	err := fastclient.Do(req, res)
+	if err != nil {
+		fmt.Println("error: ", err)
+		return err
+	}
+
+	if string(res.Body()) == "OK" {
+		return nil
+	} else {
+		return err
+	}
+
 }
 
 //export kv739_shutdown

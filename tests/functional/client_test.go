@@ -28,8 +28,26 @@ func TestServerAddress(t *testing.T) {
 		t.Errorf("Failed Address Test #2")
 	}
 
+	killSwitch := make(chan int)
+	// Nuke database and start fresh
+	pid := -1
+	var err error
+	if pid, err = launchServer(server_path, killSwitch, true, "200"); err != nil {
+		panic(err)
+	}
+
 	if Kv739_init("127.0.0.1:5000") != 0 {
 		t.Errorf("Failed Address Test #3")
+	}
+
+	killSwitch <- 1
+	<-killSwitch
+	time.Sleep(2 * time.Second)
+	if !checkAlive(pid) {
+		fmt.Printf("Server died pid: %v\n", pid)
+	} else {
+		fmt.Printf("Server alive with pid: %v\n", pid)
+
 	}
 
 }

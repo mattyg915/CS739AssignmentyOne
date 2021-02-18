@@ -23,6 +23,15 @@ class HandleRequests(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
+    def do_GET(self):
+        route = urlparse(self.path)
+        if route.path == '/health/':
+            response = "OK"
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
     # all requests handled via POST
     # def do_GET(self):
     #     connection = sqlite3.connect(dbPath)

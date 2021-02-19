@@ -59,7 +59,7 @@ def main():
         keyf = open(runs[i]+'keys', 'w')
         for i in range(len(keys)):
             value = ''
-            if types[i]:
+            if types[i] == '1':
                 value = ''.join(random.choices(kvspace, k = random.randint(1,vallenMax)))
             keyf.write(types[i]+'['+keys[i]+'['+value+'\n')
         keyf.close()

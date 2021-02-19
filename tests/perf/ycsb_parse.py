@@ -3,6 +3,7 @@ import string
 
 #1 ascii char is 1 byte long
 keylenMax=128
+vallenMax=2048
 
 # reads are 0s, writes are 1s
 read = 0
@@ -10,13 +11,18 @@ write = 1
 
 ycsb_dir = 'ycsbworloads/'
 
-'''loads = ['ycsba_load',
+loads = ['ycsba_load',
         'ycsbb_load',
         'ycsbc_load',
         'ycsbd_load',
-        'ycsbf_load']'''
+        'ycsbf_load']
 
-runs = ['ycsba_run',
+runs = ['ycsba_load',
+        'ycsbb_load',
+        'ycsbc_load',
+        'ycsbd_load',
+        'ycsbf_load',
+        'ycsba_run',
         'ycsbb_run',
         'ycsbc_run',
         'ycsbd_run',
@@ -49,10 +55,15 @@ def main():
             else:
                 keys[j] = key_dict[key_num]
         f.close()
+        #write workload
         keyf = open(runs[i]+'keys', 'w')
         for i in range(len(keys)):
-            keyf.write(types[i]+'['+keys[i]+'\n')
+            value = ''
+            if types[i]:
+                value = ''.join(random.choices(kvspace, k = random.randint(1,vallenMax)))
+            keyf.write(types[i]+'['+keys[i]+'['+value+'\n')
         keyf.close()
+        #write all keys in sorted order
 
 if __name__ == "__main__":
     main()

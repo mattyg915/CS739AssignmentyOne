@@ -6,6 +6,7 @@ keylenMax=128
 vallenMax=2048
 
 # reads are 0s, writes are 1s
+# oops actually the flips
 read = 0
 write = 1
 

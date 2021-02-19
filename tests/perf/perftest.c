@@ -14,6 +14,7 @@ clock_t start, end, total;
 
 static void split_kv(char * line) {
     
+    int type = -1;
     char* key = NULL;
     char* val = NULL;
 	char value[2049];
@@ -21,7 +22,12 @@ static void split_kv(char * line) {
     char* token = strtok(line, delim);
     //token = strtok(NULL, delim, &state2);
     while( token != NULL ) {
-      if (key == NULL) {
+      if (type == -1) {
+          type = atoi(strdup(token));
+          printf( " type: %d\n", type );
+          token = strtok(NULL, delim);
+      }
+      else if (key == NULL) {
           key = strdup(token);
           printf( " key: %s\n", key );
           token = strtok(NULL, delim);
@@ -33,27 +39,17 @@ static void split_kv(char * line) {
           token = strtok(NULL, delim);
       }
     }
-    //printf( " key: %s\n", key );
-    //printf( " value: %s\n", val );
-    start = clock();
-    kv739_put(key, val, value);
-    kv739_get(key, value);
-    total += (clock() - start);
-    printf("Value inserted %s\n", value);
-        //printf("%s\n", value);
-    /*char *state1, *state2;
-    char *token = strtok_r(line, delim, &state1);
-    while(token){
-        char *current_string = strdup(token);
-
-        char *tk = strtok_r(current_string, delim, &state2); // KEY
-        printf("key: %s \r\n", tk);
-        tk = strtok_r(NULL, delim, &state2);                    // VALUE
-        printf("value: %s\r\n", tk);
-        printf("%s\n", token);
-        free(current_string);
-        break;
-    }*/
+    if (type) { //1 mean put
+        start = clock();
+        kv739_put(key, val, value);
+        //kv739_get(key, value);
+        total += (clock() - start);
+    }
+    else { //0 mean get
+        start = clock();
+        kv739_get(key, value);
+        total += (clock() - start);
+    }
     free(key);
     free(val);
 }
@@ -72,7 +68,7 @@ int main( int argc, char *argv[] )
     
     
 	kv739_init("127.0.0.1:5000");
-	printf("Putting Value now!\n");
+	printf("Putting Values now!\n");
 
 	int count = 0;
     
@@ -104,8 +100,8 @@ int main( int argc, char *argv[] )
     //total = end - start;
     
     int msec = total * 1000 / CLOCKS_PER_SEC;
-    printf("%d requests took %d seconds %d milliseconds %ld\n", count*2, msec/1000, msec%1000, total);
-    printf("average response time is %d seconds %d milliseconds\n", msec/1000/(count*2), msec%1000/(count*2));
+    printf("%d requests took %d seconds %d milliseconds %ld\n", count, msec/1000, msec%1000, total);
+    printf("average response time is %d seconds %d milliseconds\n", msec/1000/(count), msec%1000/(count));
 
     fclose(dbfp);
 

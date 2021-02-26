@@ -12,7 +12,6 @@ import os
 import sqlite3
 
 path = os.path.dirname(os.path.abspath(__file__))
-dbPath = os.path.join(path, 'kv.db')
 
 caching = False
 cache_size = 0
@@ -297,7 +296,11 @@ class HandleRequests(BaseHTTPRequestHandler):
 
 class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
+        global dbPath
         ip, port = sys.argv[1], sys.argv[2]
+        dbName = port + 'kv.db'
+        dbPath = os.path.join(path, dbName)
+
         connection = sqlite3.connect(dbPath)
         cursor = connection.cursor()
 

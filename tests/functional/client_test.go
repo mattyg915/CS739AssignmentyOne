@@ -19,6 +19,12 @@ var map_mutex sync.Mutex
 const server_path = "../../service/server.py"
 const database_path = "../../service/kv.db"
 
+func TestShutdown(t *testing.T) {
+	if Kv739_shutdown() == 0 {
+		t.Errorf("Shutdown returned 0 without init")
+	}
+}
+
 func TestServerAddress(t *testing.T) {
 	if Kv739_init("aaaaaaaaaaaaa") != -1 {
 		t.Errorf("Failed Address Test #1")

@@ -18,6 +18,7 @@ var map_mutex sync.Mutex
 
 const server_path = "../../service/server.py"
 const database_path = "../../service/kv.db"
+const nodes_path = "../../service/nodes.txt"
 
 func TestShutdown(t *testing.T) {
 	if Kv739_shutdown() == 0 {
@@ -42,8 +43,13 @@ func TestServerAddress(t *testing.T) {
 		panic(err)
 	}
 
-	if Kv739_init("127.0.0.1:5000") != 0 {
-		t.Errorf("Failed Address Test #3")
+	//if Kv739_init("127.0.0.1:5000") != 0 {
+	//	t.Errorf("Failed Address Test #3")
+	//}
+
+	servers := []string{"127.0.0.1:5000"}
+	if Kv739_init_new(servers) != 0 {
+		t.Errorf("Failed Address Test #4")
 	}
 
 	killSwitch <- 1
@@ -55,6 +61,9 @@ func TestServerAddress(t *testing.T) {
 		fmt.Printf("Server alive with pid: %v\n", pid)
 
 	}
+
+	//servers := []string{"localhost:5000"}
+	//Kv739_init_new(servers)
 
 }
 
@@ -80,7 +89,7 @@ func launchServer(server_exe_path string, killSwitch chan int, killDB bool, cach
 		}
 	}
 
-	cmdArgs := []string{"127.0.0.1", "5000", "--cache", cacheSize}
+	cmdArgs := []string{"127.0.0.1", "5000", nodes_path}
 	cmdServer := exec.Command(server_exe_path, cmdArgs...)
 	if err := cmdServer.Start(); err != nil {
 		log.Printf("Failed to start cmd: %v", err)

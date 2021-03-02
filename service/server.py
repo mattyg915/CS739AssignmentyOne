@@ -27,10 +27,29 @@ class HandleRequests(BaseHTTPRequestHandler):
         if route.path == '/health/':
             response = "OK"
             self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+        if route.path == '/nodes/':
+            response = json.dumps({"nodes" : nodeList})
+            self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
+        if route.path == '/die_clean/':
+            response = "DYING"
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+            #TODO Flush all state and die
+        if route.path == '/die/':
+            #TODO Kill all threads and
+            response = "DYING"
+
     # all requests handled via POST
     # def do_GET(self):
     #     connection = sqlite3.connect(dbPath)
@@ -293,22 +312,33 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
 
+def readNodes(nodes_file):
+    f = open(nodes_file, "r")
+    l = []
+    for line in f.readlines():
+        l += [line.strip(' ').strip('\n')]
+    return l
+
 
 class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
-        ip, port = sys.argv[1], sys.argv[2]
+        global nodeList
+        ip, port, nodes_file = sys.argv[1], sys.argv[2], sys.argv[3]
+        nodeList = readNodes(nodes_file)
+
         dbName = port + 'kv.db'
         dbPath = os.path.join(path, dbName)
 
         connection = sqlite3.connect(dbPath)
         cursor = connection.cursor()
+        print (nodeList)
 
-        if len(sys.argv) > 4:
-            enable_cache, size = sys.argv[3], sys.argv[4]
-            if enable_cache == "--cache":
-                caching = True
-                cache_size = int(size)
+        #if len(sys.argv) > 4:
+        #    enable_cache, size = sys.argv[3], sys.argv[4]
+        #    if enable_cache == "--cache":
+        #        caching = True
+        #        cache_size = int(size)
 
         # make sure we only create the table once
         cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='records' ''')

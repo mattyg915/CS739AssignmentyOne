@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/valyala/fasthttp"
+	"math/rand"
 	"strconv"
 	"strings"
 	"unsafe"
@@ -16,6 +17,14 @@ var get_path string
 var put_path string
 var health_path string
 
+const MAX_SERVER_NUM = int(30)
+
+var init_list = make([]string, MAX_SERVER_NUM)
+var no_init = int(0)
+
+var node_list = make([]string, MAX_SERVER_NUM)
+var node_no = int(0)
+
 var fastclient *fasthttp.Client
 var strPost = []byte("POST")
 var strGet = []byte("GET")
@@ -25,6 +34,10 @@ type KeyValue struct {
 	Exists      string `json:"exists"`
 	FormerValue string `json:"former_value"`
 	NewValue    string `json:"new_value"`
+}
+
+type NodeList struct {
+	NodeList []string `json: "nodes"`
 }
 
 //export kv739_init
@@ -49,6 +62,127 @@ func kv739_init(server_name *C.char) int32 {
 	} else {
 		fmt.Println("Init Connection error: ", err)
 		return -1
+	}
+}
+
+//export kv739_init_new
+func kv739_init_new(server_names **C.char) int32 {
+	fastclient = &fasthttp.Client{}
+	// Max number of servers is MAX_SERVER_NUM
+	tmpslice := (*[1 << 30]*C.char)(unsafe.Pointer(server_names))[:MAX_SERVER_NUM:MAX_SERVER_NUM]
+	//servers := make([]string, MAX_SERVER_NUM)
+
+	for i, elem := range tmpslice {
+		if elem == nil {
+			fmt.Println("Reached end of the name array!")
+			break
+		}
+
+		init_list[i] = C.GoString(elem)
+		no_init += 1
+		//fmt.Printf("Element: %s\n", s)
+	}
+
+	fmt.Printf("The init servers %v\n", init_list)
+	// Get the full node list from a seed node
+	foundAlive := false
+	var node_l NodeList
+	for _, server := range init_list[:no_init] {
+		nodeList, err := getNodeList(server)
+		if err == nil {
+			foundAlive = true
+			node_l = nodeList
+			break
+		}
+	}
+
+	if !foundAlive {
+		fmt.Println("[kv739_init_new] No nodes alive")
+		return -1
+	}
+
+	copy(node_list[:], node_l.NodeList[:])
+	node_no = len(node_l.NodeList)
+	has_init = 1
+
+	return 0
+}
+
+//export kv739_die
+func kv739_die(server *C.char, clean C.int) int32 {
+	srvr := C.GoString(server)
+	err := validateServer(srvr)
+	if err != nil {
+		return -1
+	}
+
+	c := int(clean)
+	if c == 1 {
+
+	} else {
+	}
+
+	return 0
+
+}
+
+// Returns the set of nodes reachable from the server
+func getNodeList(server string) (NodeList, error) {
+	err := validateServer(server)
+	if err != nil {
+		return NodeList{}, err
+	}
+
+	err = doConnectionTestWithServer(server)
+	if err != nil {
+		return NodeList{}, err
+	}
+
+	nodeList_path := "http://" + server + "/nodes/"
+	req := fasthttp.AcquireRequest()
+	//req.SetBody()
+	fmt.Printf("[getNodeList] The server path %v\n", nodeList_path)
+	req.Header.SetMethodBytes(strGet)
+	req.Header.SetContentType("text/plain")
+	req.SetRequestURIBytes([]byte(nodeList_path))
+
+	res := fasthttp.AcquireResponse()
+	err = fastclient.Do(req, res)
+	if err != nil {
+		fmt.Println("error: ", err)
+		return NodeList{}, err
+	}
+
+	var nodeList NodeList
+	fmt.Printf("[getNodeList] The list body: %s\n", res.Body())
+	err = json.Unmarshal(res.Body(), &nodeList)
+	if err != nil {
+		fmt.Println("[getNodeList] Error unmarshalling json")
+		return NodeList{}, err
+	}
+
+	return nodeList, nil
+}
+
+func doConnectionTestWithServer(server string) error {
+	req := fasthttp.AcquireRequest()
+	//req.SetBody()
+	s_path := "http://" + server + "/health/"
+	req.Header.SetMethodBytes(strGet)
+	req.Header.SetContentType("text/plain")
+	req.SetRequestURIBytes([]byte(s_path))
+
+	res := fasthttp.AcquireResponse()
+	err := fastclient.Do(req, res)
+	if err != nil {
+		fmt.Println("error: ", err)
+		return err
+	}
+
+	if string(res.Body()) == "OK" {
+		return nil
+	} else {
+		return err
 	}
 }
 
@@ -149,6 +283,11 @@ func validateValue(value string) error {
 	return nil
 }
 
+func randomChoice() string {
+	idx := rand.Int() % node_no
+	return "http://" + node_list[idx]
+}
+
 //export kv739_get
 func kv739_get(key *C.char, value *C.char) int32 {
 	if has_init == 0 {
@@ -166,13 +305,15 @@ func kv739_get(key *C.char, value *C.char) int32 {
 	m["key"] = k
 	m["method"] = string("get")
 
+	s_path := randomChoice() + "/kv739/"
+
 	reqJSON, _ := json.Marshal(m)
 
 	req := fasthttp.AcquireRequest()
 	req.SetBody(reqJSON)
 	req.Header.SetMethodBytes(strPost)
 	req.Header.SetContentType("application/json")
-	req.SetRequestURIBytes([]byte(get_path))
+	req.SetRequestURIBytes([]byte(s_path))
 
 	res := fasthttp.AcquireResponse()
 	err = fastclient.Do(req, res)
@@ -243,13 +384,15 @@ func kv739_put(key *C.char, value *C.char, old_value *C.char) int32 {
 	m["value"] = val
 	m["method"] = string("put")
 
+	s_path := randomChoice() + "/kv739/"
+
 	reqJSON, _ := json.Marshal(m)
 
 	req := fasthttp.AcquireRequest()
 	req.SetBody(reqJSON)
 	req.Header.SetMethodBytes(strPost)
 	req.Header.SetContentType("application/json")
-	req.SetRequestURIBytes([]byte(get_path))
+	req.SetRequestURIBytes([]byte(s_path))
 
 	res := fasthttp.AcquireResponse()
 	err = fastclient.Do(req, res)

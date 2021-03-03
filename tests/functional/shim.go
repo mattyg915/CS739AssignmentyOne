@@ -8,10 +8,22 @@ package main
 */
 import "C"
 
-//import "unsafe"
+import "unsafe"
 
 func Kv739_init(address string) int32 {
 	return int32(C.kv739_init(C.CString(address)))
+}
+
+func Kv739_init_new(address []string) int32 {
+	cArray := C.malloc(C.size_t(len(address)+1) * C.size_t(unsafe.Sizeof(uintptr(0))))
+	a := (*[1<<30 - 1]*C.char)(cArray)
+
+	for i, val := range address {
+		a[i] = C.CString(val)
+	}
+	a[len(address)] = (*C.char)(unsafe.Pointer(uintptr(0)))
+
+	return int32(C.kv739_init_new((**C.char)(unsafe.Pointer(cArray))))
 }
 
 func Kv739_get(key string, value []byte) int32 {

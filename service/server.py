@@ -318,7 +318,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             global entropy_counter
             entropy_counter += 1
-            print(entropy_counter)
 
 def readNodes(nodes_file):
     f = open(nodes_file, "r")

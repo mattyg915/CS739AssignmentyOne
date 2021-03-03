@@ -3,7 +3,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from urllib.parse import urlparse
 from socketserver import ThreadingMixIn
-from datetime import date
+from datetime import datetime
 
 import httplib 
 
@@ -17,6 +17,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 # caching = False
 # cache_size = 0
+# cache_size =
 # cache = OrderedDict()
 
 KEEP_RUNNING = True
@@ -300,8 +301,8 @@ class HandleRequests(BaseHTTPRequestHandler):
                 if result is not None and result[0] != value:
                     # don't waste time updating value with same value
                     try:
-                        time = date.today()
-                        cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''', (value, time, key))
+                        millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+                        cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''', (value, millisec, key))
                         connection.commit()
                         # # update the cache
                         # cache[key] = value
@@ -318,8 +319,8 @@ class HandleRequests(BaseHTTPRequestHandler):
                         return
                 else:
                     try:
-                        time = date.today()
-                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, time))
+                        millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, millisec))
                         connection.commit()
                     except Exception as e:
                         message = "Internal server error: {}".format(e)
@@ -397,7 +398,7 @@ class Server(ThreadingMixIn, HTTPServer):
         # make sure we only create the table once
         cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='records' ''')
         if cursor.fetchone()[0] == 0:
-            cursor.execute('''CREATE TABLE 'records' (key text, value text, time timestamp)''')
+            cursor.execute('''CREATE TABLE 'records' (key text, value text, time integer )''')
 
         server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
         print('Server initializing, reachable at http://{}:{}'.format(ip, port))

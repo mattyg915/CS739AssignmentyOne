@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 from socketserver import ThreadingMixIn
 from datetime import date
 
+import httplib 
+
 import json
 import sys
 import os
@@ -16,6 +18,8 @@ path = os.path.dirname(os.path.abspath(__file__))
 # caching = False
 # cache_size = 0
 # cache = OrderedDict()
+
+KEEP_RUNNING = True
 
 class HandleRequests(BaseHTTPRequestHandler):
     # disable logging
@@ -45,10 +49,34 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-            #TODO Flush all state and die
+            #notify all reachable hosts
+            for conn in conns:
+                conn.request('GET', 'death_notify')
+                conn.close()
+            #Flush all state and die
+            #skip record known hosts
+            #shutdown()
+            #exit()
+            KEEP_RUNNING = False
         if route.path == '/die/':
             #TODO Kill all threads and
-            response = "DYING"
+            exit()
+        if route.path == '/death_notify/':
+            host, port = self.client_address
+            success = False
+            #received a death notification, remove server from reachable
+            for i in range(len(node_list)):
+                if node_list[i] is None:
+                    continue
+                parts = node_list[i].split()
+                if parts[0] == host and parts[1] == port:
+                    conns[i].close()
+                    conns[i] = None
+                    node_list[i] = None
+                    success = True
+                    break
+                if success:
+                    print("successfully removed a server from reachable: host = %s, port = %d" % (host, port))
 
     # all requests handled via POST
     # def do_GET(self):
@@ -319,6 +347,10 @@ class HandleRequests(BaseHTTPRequestHandler):
             global entropy_counter
             entropy_counter += 1
 
+    def anti_entropy(self):
+        #select a random peer server and resolve all conflicts
+
+###########end of handle request#####################
 def readNodes(nodes_file):
     f = open(nodes_file, "r")
     l = []
@@ -331,7 +363,10 @@ class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
         global node_list
+        global reachable_list
+        global conns
         global entropy_counter
+        
         entropy_counter = 0
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         node_list = readNodes(nodes_file)
@@ -339,6 +374,19 @@ class Server(ThreadingMixIn, HTTPServer):
         node_address = node_list[int(node_index)].split()
         ip = node_address[0]
         port = node_address[1]
+        
+        
+        
+        #setup connections to peer servers
+        #we have this at each server, so 2 way connections
+        conns = [None]*(len(node_list)-1)
+        for i in range(len(node_list)):
+            if i = node_index:
+                continue
+            parts = node_list[i].split()
+            conns[] = httplib.HTTPConnection(parts[0], port=parts[1])  
+
+
 
         dbName = port + 'kv.db'
         dbPath = os.path.join(path, dbName)
@@ -353,4 +401,12 @@ class Server(ThreadingMixIn, HTTPServer):
 
         server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
         print('Server initializing, reachable at http://{}:{}'.format(ip, port))
-        server.serve_forever()
+        #server.serve_forever()
+        try:
+            while keep_running():
+                server.handle_request()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            # Clean-up server (close socket, etc.)
+            server.server_close()

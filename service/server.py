@@ -316,6 +316,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
+            global entropy_counter
+            entropy_counter += 1
+            print(entropy_counter)
 
 def readNodes(nodes_file):
     f = open(nodes_file, "r")
@@ -329,6 +332,8 @@ class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
         global node_list
+        global entropy_counter
+        entropy_counter = 0
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         node_list = readNodes(nodes_file)
 

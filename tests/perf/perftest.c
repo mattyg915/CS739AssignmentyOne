@@ -1,18 +1,22 @@
-#include "lib739kv.h"
+//#include "lib739kv.h"
+#include "kv739.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <math.h>
 
 const char delim[2] = "[";
 const size_t keylenMax=128;
 const size_t vallenMax=2048;
 
 clock_t start, end, total;
+int num_gets = 0;
+int num_puts = 0;
+unsigned long long int tot_size = 0; //size in bytes
 
-static void split_kv(char * line) {
+static void split_kv(char * line, clock_t *latencies, int i) {
     
     int type = -1;
     char* key = NULL;
@@ -20,43 +24,59 @@ static void split_kv(char * line) {
 	char value[2049];
         
     char* token = strtok(line, delim);
-    //token = strtok(NULL, delim, &state2);
     while( token != NULL ) {
       if (type == -1) {
           type = atoi(strdup(token));
-          printf( " type: %d\n", type );
+          //printf( " type: %d\n", type );
           token = strtok(NULL, delim);
       }
       else if (key == NULL) {
           key = strdup(token);
-          printf( " key: %s\n", key );
+          //printf( " key: %s\n", key );
           token = strtok(NULL, delim);
       }
       else {
           val = strdup(token);
           val[strcspn(val, "\n")] = 0;
-          printf( " value: %s\n", val );
+          //printf( " value: %s\n", val );
           token = strtok(NULL, delim);
       }
     }
-    if (type) { //1 mean put
+    if (type) { //1 means put
         start = clock();
         kv739_put(key, val, value);
         //kv739_get(key, value);
-        total += (clock() - start);
+        end = clock();
+        total += (end-start);
+        
+        num_puts++;
+        tot_size+=(unsigned long long int)strlen(val);
+        tot_size+=(unsigned long long int)strlen(value);
     }
-    else { //0 mean get
+    else { //0 means get
         start = clock();
         kv739_get(key, value);
-        total += (clock() - start);
+        end = clock();
+        total += (end-start);
+        
+        num_gets++;
+        tot_size+=(unsigned long long int)strlen(value);
     }
+    //printf( " value: %s\n", value );
+    latencies[i] = (end-start);
+    
     free(key);
     free(val);
 }
 
+int cmpfunc (const void * a, const void * b) {
+   return ( *(clock_t*)a - *(clock_t*)b );
+}
+
+
 int main( int argc, char *argv[] )
 {
-    //usage: ./prog dbfile #threads 
+    //usage: ./prog dbfile //#threads 
     //tracefile
     //start = clock();
     
@@ -64,46 +84,58 @@ int main( int argc, char *argv[] )
     size_t len = 0;
     ssize_t read;
     
-    FILE *dbfp = fopen(argv[1], "r");
+    FILE *fp = fopen(argv[1], "r");
     
-    
+    start = clock();
 	kv739_init("127.0.0.1:5000");
-	printf("Putting Values now!\n");
+    end = clock();
+	printf("init time = %ld usec\n", (end - start));
 
+    //count lines
 	int count = 0;
-    
-    while ((read = getline(&line, &len, dbfp)) != -1) {
-        //printf("Retrieved line of length %zu:\n", read);
-        printf("line: %s\n", line);
-        
-        //char * key [keylenMax+1];
-        //char * val [vallenMax+1];
-        split_kv(line);
+    while ((read = getline(&line, &len, fp)) != -1) {
         count++;
-        
-        //printf( " val: %s\n", val );
-        
-        /*if (kv739_put(key, val, value) >= 0)
-            printf("Value inserted\n");
-        if (kv739_get(key, value) == 0)
-            printf("%s\n", value);*/
-        
-
-        //printf("key: %s\n", key);
-        //printf("val: %s\n\n", val);
+    }
+    rewind(fp);
+    clock_t *latencies = (clock_t*)malloc(count*sizeof(clock_t));
+    
+    int i = 0;
+    while ((read = getline(&line, &len, fp)) != -1) {
+        split_kv(line, latencies, i);
+        i++;
     }
 
-    kv739_shutdown();
+    start = clock();
+	kv739_shutdown();
+    end = clock();
+	printf("shutdown time = %ld usec\n", (end - start));
     
-    //sleep(10);
-    //end = clock();
-    //total = end - start;
+    qsort(latencies, count, sizeof(clock_t), cmpfunc);
+    //mean, median,  and total latency
+    printf("Summary: %d gets, %d puts\n", num_gets, num_puts);
+    //int msec = total * 1000 / CLOCKS_PER_SEC;
+    clock_t usec_median = latencies[(int)(count/2)];
+    printf("A total of %d requests took %ld useconds\n", count, total);
+    printf("Average response time is %d useconds\n", ((int)total)/(count));
+    printf("Median response time is %ld useconds\n", usec_median);
+    //tail 99 and max min latency
+    int tail_start = (int)(ceil(count*99/100));
+    clock_t usec_tail = 0;
+    for (int i = tail_start;i<count;i++) usec_tail+=latencies[i];
+    clock_t usec_max = latencies[count-1];
+    clock_t usec_min = latencies[0];
+    printf("99 percentile response time is %d useconds\n", ((int)usec_tail)/(count-tail_start));
+    printf("max response time is %ld useconds\n", usec_max);
+    printf("min response time is %ld useconds\n", usec_min);
+    //per sec avg throughput measured in value bytes
+    int avg_thru = (int)(tot_size * CLOCKS_PER_SEC / total);
+    printf("Total throughput is %llu Bytes/sec\n", tot_size);
+    printf("Average throughput is %d Bytes/sec\n", avg_thru);
     
-    int msec = total * 1000 / CLOCKS_PER_SEC;
-    printf("%d requests took %d seconds %d milliseconds %ld\n", count, msec/1000, msec%1000, total);
-    printf("average response time is %d seconds %d milliseconds\n", msec/1000/(count), msec%1000/(count));
-
-    fclose(dbfp);
+    free(latencies);
+    
+    fclose(fp);
+    
 
     //FILE *tracefp = fopen(argv[1], "r");
     

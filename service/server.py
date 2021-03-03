@@ -23,6 +23,9 @@ path = os.path.dirname(os.path.abspath(__file__))
 KEEP_RUNNING = True
 
 class HandleRequests(BaseHTTPRequestHandler):
+
+    conn_index = 0
+
     # disable logging
     def log_message(self, format, *args):
         return
@@ -355,9 +358,14 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             global entropy_counter
             entropy_counter += 1
+            
+            if entropy_counter > 1000:
+                self.anti_entropy()
+                entropy_counter = 0
 
     def anti_entropy(self):
         #select a random peer server and resolve all conflicts
+        conn[conn_index]
         return
 
 ###########end of handle request#####################

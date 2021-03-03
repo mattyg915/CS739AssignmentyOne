@@ -30,6 +30,33 @@ class HandleRequests(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
+    def validate_string(self, string_to_validate):
+        try:
+            string_to_validate.encode('ASCII')
+        except UnicodeEncodeError:
+            package = {"error": "invalid char in body"}
+            response = json.dumps(package)
+
+            self.send_response(400)
+            self.send_header('Content-type', 'application/json')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+            return False
+
+        if '[' in string_to_validate or ']' in string_to_validate:
+            package = {"error": "invalid char in body"}
+            response = json.dumps(package)
+
+            self.send_response(400)
+            self.send_header('Content-type', 'application/json')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+            return False
+
+        return True
+
     def do_GET(self):
         route = urlparse(self.path)
         if route.path == '/health/':
@@ -206,32 +233,15 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.wfile.write(response.encode())
                 return
 
-            query = (key,)
+
             # cache_hit = False
 
             # validate strings
-            try:
-                key.encode('ASCII')
-            except UnicodeEncodeError:
-                package = {"error": "invalid char in body"}
-                response = json.dumps(package)
-
-                self.send_response(400)
-                self.send_header('Content-type', 'application/json')
-                self.send_header("Content-Length", str(len(response)))
-                self.end_headers()
-                self.wfile.write(response.encode())
+            valid_string = self.validate_string(key)
+            if (valid_string is not True):
                 return
-            if '[' in key or ']' in key:
-                package = {"error": "invalid char in body"}
-                response = json.dumps(package)
 
-                self.send_response(400)
-                self.send_header('Content-type', 'application/json')
-                self.send_header("Content-Length", str(len(response)))
-                self.end_headers()
-                self.wfile.write(response.encode())
-                return
+            query = (key,)
 
             # if caching:
             #     if key in cache.keys():
@@ -286,29 +296,10 @@ class HandleRequests(BaseHTTPRequestHandler):
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
             else:
                 value = body['value']
-                # validate strings
-                try:
-                    value.encode('ASCII')
-                except UnicodeEncodeError:
-                    package = {"error": "invalid char in body"}
-                    response = json.dumps(package)
-
-                    self.send_response(400)
-                    self.send_header('Content-type', 'application/json')
-                    self.send_header("Content-Length", str(len(response)))
-                    self.end_headers()
-                    self.wfile.write(response.encode())
+                valid_string = self.validate_string(value)
+                if (valid_string is not True):
                     return
-                if '[' in value or ']' in value:
-                    package = {"error": "invalid char in body"}
-                    response = json.dumps(package)
 
-                    self.send_response(400)
-                    self.send_header('Content-type', 'application/json')
-                    self.send_header("Content-Length", str(len(response)))
-                    self.end_headers()
-                    self.wfile.write(response.encode())
-                    return
                 if result is not None and result[0] != value:
                     # don't waste time updating value with same value
                     try:
@@ -362,6 +353,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             if entropy_counter > 1000:
                 self.anti_entropy()
                 entropy_counter = 0
+
+    def broadcast(self):
+        return
 
     def anti_entropy(self):
         #select a random peer server and resolve all conflicts

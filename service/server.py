@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from socketserver import ThreadingMixIn
 from datetime import datetime
 
-import httplib 
+import http.client
 
 import json
 import sys
@@ -61,6 +61,13 @@ class HandleRequests(BaseHTTPRequestHandler):
             KEEP_RUNNING = False
         if route.path == '/die/':
             #TODO Kill all threads and
+            response = "DYING"
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+            
             KEEP_RUNNING = False
             exit()
         if route.path == '/death_notify/':
@@ -351,6 +358,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
     def anti_entropy(self):
         #select a random peer server and resolve all conflicts
+        return
 
 ###########end of handle request#####################
 def readNodes(nodes_file):
@@ -381,12 +389,12 @@ class Server(ThreadingMixIn, HTTPServer):
         
         #setup connections to peer servers
         #we have this at each server, so 2 way connections
-        conns = [None]*(len(node_list)-1)
+        conns = []
         for i in range(len(node_list)):
-            if i = node_index:
+            if i == node_index:
                 continue
             parts = node_list[i].split()
-            conns[] = httplib.HTTPConnection(parts[0], port=parts[1])  
+            conns.append(http.client.HTTPConnection(parts[0], port=parts[1]))
 
 
 
@@ -404,8 +412,9 @@ class Server(ThreadingMixIn, HTTPServer):
         server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
         print('Server initializing, reachable at http://{}:{}'.format(ip, port))
         #server.serve_forever()
+        global KEEP_RUNNING
         try:
-            while keep_running():
+            while KEEP_RUNNING:
                 server.handle_request()
         except KeyboardInterrupt:
             pass

@@ -40,8 +40,7 @@ type NodeList struct {
 	NodeList []string `json: "nodes"`
 }
 
-//export kv739_init
-func kv739_init(server_name *C.char) int32 {
+func kv739_init_old(server_name *C.char) int32 {
 	server = C.GoString(server_name)
 	//TODO: Error handling for the server here
 	err := validateServer(server)
@@ -65,8 +64,8 @@ func kv739_init(server_name *C.char) int32 {
 	}
 }
 
-//export kv739_init_new
-func kv739_init_new(server_names **C.char) int32 {
+//export kv739_init
+func kv739_init(server_names **C.char) int32 {
 	fastclient = &fasthttp.Client{}
 	// Max number of servers is MAX_SERVER_NUM
 	tmpslice := (*[1 << 30]*C.char)(unsafe.Pointer(server_names))[:MAX_SERVER_NUM:MAX_SERVER_NUM]
@@ -117,12 +116,32 @@ func kv739_die(server *C.char, clean C.int) int32 {
 	}
 
 	c := int(clean)
+	var die_path string
 	if c == 1 {
-
+		die_path = "http://" + srvr + "/die_clean/"
 	} else {
+		die_path = "http://" + srvr + "/die/"
 	}
 
-	return 0
+	req := fasthttp.AcquireRequest()
+	//req.SetBody()
+	fmt.Printf("[kv739_die] The die path: %v\n", kv739_die)
+	req.Header.SetMethodBytes(strGet)
+	req.Header.SetContentType("text/plain")
+	req.SetRequestURIBytes([]byte(die_path))
+
+	res := fasthttp.AcquireResponse()
+	err = fastclient.Do(req, res)
+	if err != nil {
+		fmt.Println("error: ", err)
+		return -1
+	}
+
+	if string(res.Body()) == "DYING" {
+		return 0
+	} else {
+		return -1
+	}
 
 }
 
@@ -301,11 +320,34 @@ func kv739_get(key *C.char, value *C.char) int32 {
 		return -1
 	}
 
+	for _, server := range node_list[:node_no] {
+		ret := do_kv739_get(key, value, server)
+		if ret != -1 {
+			return ret
+		}
+	}
+
+	fmt.Println("[kv739_get] No reachable servers")
+	return -1
+}
+
+func do_kv739_get(key *C.char, value *C.char, server string) int32 {
+	/*if has_init == 0 {
+		return -1
+	}*/
+
+	k := C.GoString(key)
+	var err error
+	/*err := validateKey(k)
+	if err != nil {
+		return -1
+	}*/
+
 	m := make(map[string]string)
 	m["key"] = k
 	m["method"] = string("get")
 
-	s_path := randomChoice() + "/kv739/"
+	s_path := "http://" + server + "/kv739/"
 
 	reqJSON, _ := json.Marshal(m)
 
@@ -365,26 +407,51 @@ func kv739_put(key *C.char, value *C.char, old_value *C.char) int32 {
 	}
 
 	k := C.GoString(key)
-	val := C.GoString(value)
 
 	err := validateKey(k)
 	if err != nil {
-		fmt.Println("Invalid Key: ", err)
 		return -1
 	}
 
-	err = validateValue(val)
-	if err != nil {
-		fmt.Println("Invalid Value: ", err)
-		return -1
+	for _, server := range node_list[:node_no] {
+		ret := do_kv739_put(key, value, old_value, server)
+		if ret != -1 {
+			return ret
+		}
 	}
+
+	fmt.Println("[kv739_get] No reachable servers")
+	return -1
+
+}
+
+func do_kv739_put(key *C.char, value *C.char, old_value *C.char, server string) int32 {
+	//if has_init == 0 {
+	//	return -1
+	//}
+
+	var err error
+	k := C.GoString(key)
+	val := C.GoString(value)
+
+	//err := validateKey(k)
+	//if err != nil {
+	//	fmt.Println("Invalid Key: ", err)
+	//	return -1
+	//}
+
+	//err = validateValue(val)
+	//if err != nil {
+	//	fmt.Println("Invalid Value: ", err)
+	//	return -1
+	//}
 
 	m := make(map[string]string)
 	m["key"] = k
 	m["value"] = val
 	m["method"] = string("put")
 
-	s_path := randomChoice() + "/kv739/"
+	s_path := "http://" + server + "/kv739/"
 
 	reqJSON, _ := json.Marshal(m)
 

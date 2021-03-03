@@ -40,6 +40,11 @@ type NodeList struct {
 	NodeList []string `json: "nodes"`
 }
 
+type Reachable struct {
+	Server    string   `json:"server"`
+	Reachable []string `json:"reachable"`
+}
+
 func kv739_init_old(server_name *C.char) int32 {
 	server = C.GoString(server_name)
 	//TODO: Error handling for the server here
@@ -105,6 +110,58 @@ func kv739_init(server_names **C.char) int32 {
 	has_init = 1
 
 	return 0
+}
+
+//export kv739_partition
+func kv739_partition(server *C.char, reachable **C.char) int32 {
+	srvr := C.GoString(server)
+	err := validateServer(srvr)
+	if err != nil {
+		return -1
+	}
+
+	tmpslice := (*[1 << 30]*C.char)(unsafe.Pointer(reachable))[:MAX_SERVER_NUM:MAX_SERVER_NUM]
+	reachable_list := make([]string, MAX_SERVER_NUM)
+	no_reachable := 0
+
+	for i, elem := range tmpslice {
+		if elem == nil {
+			fmt.Println("Reached end of the reachable array!")
+			break
+		}
+
+		reachable_list[i] = C.GoString(elem)
+		no_reachable += 1
+		//fmt.Printf("Element: %s\n", s)
+	}
+
+	s_path := "http://" + srvr + "/partition/"
+
+	var reachabl Reachable
+	reachabl.Server = srvr
+	reachabl.Reachable = reachable_list
+
+	reqJSON, _ := json.Marshal(reachabl)
+
+	req := fasthttp.AcquireRequest()
+	req.SetBody(reqJSON)
+	req.Header.SetMethodBytes(strPost)
+	req.Header.SetContentType("application/json")
+	req.SetRequestURIBytes([]byte(s_path))
+
+	res := fasthttp.AcquireResponse()
+	err = fastclient.Do(req, res)
+	if err != nil {
+		fmt.Println("error:", err)
+		return -1
+	}
+
+	if string(res.Body()) == "OK" {
+		return 0
+	} else {
+		return -1
+	}
+
 }
 
 //export kv739_die

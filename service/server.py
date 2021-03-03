@@ -3,7 +3,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from urllib.parse import urlparse
 from socketserver import ThreadingMixIn
-from collections import OrderedDict
+from datetime import date
 
 import json
 import sys
@@ -13,9 +13,9 @@ import sqlite3
 
 path = os.path.dirname(os.path.abspath(__file__))
 
-caching = False
-cache_size = 0
-cache = OrderedDict()
+# caching = False
+# cache_size = 0
+# cache = OrderedDict()
 
 class HandleRequests(BaseHTTPRequestHandler):
     # disable logging
@@ -32,7 +32,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
         if route.path == '/nodes/':
-            response = json.dumps({"nodes" : nodeList})
+            response = json.dumps({"nodes" : node_list})
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header("Content-Length", str(len(response)))
@@ -167,7 +167,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 return
 
             query = (key,)
-            cache_hit = False
+            # cache_hit = False
 
             # validate strings
             try:
@@ -217,8 +217,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             try:
                 cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
                 result = cursor.fetchone()
-            except Exception:
-                package = {"error": "Internal server error"}
+            except Exception as e:
+                message = "Internal server error: {}".format(e)
+                package = {"error": message}
                 response = json.dumps(package)
 
                 self.send_response(500)
@@ -271,12 +272,14 @@ class HandleRequests(BaseHTTPRequestHandler):
                 if result is not None and result[0] != value:
                     # don't waste time updating value with same value
                     try:
-                        cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
+                        time = date.today()
+                        cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''', (value, time, key))
                         connection.commit()
                         # # update the cache
                         # cache[key] = value
-                    except Exception:
-                        package = {"error": "Internal server error"}
+                    except Exception as e:
+                        message = "Internal server error: {}".format(e)
+                        package = {"error": message}
                         response = json.dumps(package)
 
                         self.send_response(500)
@@ -287,10 +290,12 @@ class HandleRequests(BaseHTTPRequestHandler):
                         return
                 else:
                     try:
-                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?)''', (key, value))
+                        time = date.today()
+                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, time))
                         connection.commit()
-                    except Exception:
-                        package = {"error": "Internal server error"}
+                    except Exception as e:
+                        message = "Internal server error: {}".format(e)
+                        package = {"error": message}
                         response = json.dumps(package)
 
                         self.send_response(500)
@@ -340,7 +345,7 @@ class Server(ThreadingMixIn, HTTPServer):
         # make sure we only create the table once
         cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='records' ''')
         if cursor.fetchone()[0] == 0:
-            cursor.execute('''CREATE TABLE 'records' (key text, value text, last_update timestamp)''')
+            cursor.execute('''CREATE TABLE 'records' (key text, value text, time timestamp)''')
 
         server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
         print('Server initializing, reachable at http://{}:{}'.format(ip, port))

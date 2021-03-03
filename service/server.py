@@ -61,6 +61,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             KEEP_RUNNING = False
         if route.path == '/die/':
             #TODO Kill all threads and
+            KEEP_RUNNING = False
             exit()
         if route.path == '/death_notify/':
             host, port = self.client_address

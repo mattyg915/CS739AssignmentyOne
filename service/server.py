@@ -21,6 +21,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 # cache = OrderedDict()
 
 KEEP_RUNNING = True
+ENTROPY_MAX = 1000
 
 class HandleRequests(BaseHTTPRequestHandler):
 
@@ -350,7 +351,8 @@ class HandleRequests(BaseHTTPRequestHandler):
             global entropy_counter
             entropy_counter += 1
             
-            if entropy_counter > 1000:
+            if entropy_counter > ENTROPY_MAX:
+                # clear up entropy
                 self.anti_entropy()
                 entropy_counter = 0
 
@@ -358,8 +360,19 @@ class HandleRequests(BaseHTTPRequestHandler):
         return
 
     def anti_entropy(self):
-        #select a random peer server and resolve all conflicts
+        #select a random peer server and resolve all conflicts (1-way)
+        # assume timestamp sorted DB
+        
+        #share a hash to the entire db to the peer
+        #if hashes do not agree:
+        # share the latest ENTROPY_MAX records
+        # check complete hash again
+        #if hashes still do not agree:
+        # share the entire DB
+        
         conn[conn_index]
+        
+        conn_index += 1
         return
 
 ###########end of handle request#####################

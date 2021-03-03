@@ -106,7 +106,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
-            connection = sqlite3.connect(dbPath)
+            connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         except Exception:
             package = {"error": "error opening database connection"}
             response = json.dumps(package)
@@ -193,53 +193,53 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.wfile.write(response.encode())
                 return
 
-            if caching:
-                if key in cache.keys():
-                    result = [cache[key]]
-                    cache_hit = True
-                else:
-                    try:
-                        cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
-                        result = cursor.fetchone()
-                        cache_hit = False
-                    except Exception:
-                        package = {"error": "Internal server error"}
-                        response = json.dumps(package)
+            # if caching:
+            #     if key in cache.keys():
+            #         result = [cache[key]]
+            #         cache_hit = True
+            #     else:
+            #         try:
+            #             cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+            #             result = cursor.fetchone()
+            #             cache_hit = False
+            #         except Exception:
+            #             package = {"error": "Internal server error"}
+            #             response = json.dumps(package)
+            #
+            #             self.send_response(500)
+            #             self.send_header('Content-type', 'application/json')
+            #             self.send_header("Content-Length", str(len(response)))
+            #             self.end_headers()
+            #             self.wfile.write(response.encode())
+            #             return
 
-                        self.send_response(500)
-                        self.send_header('Content-type', 'application/json')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
-                        return
+            # else:
+            try:
+                cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                result = cursor.fetchone()
+            except Exception:
+                package = {"error": "Internal server error"}
+                response = json.dumps(package)
 
-            else:
-                try:
-                    cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
-                    result = cursor.fetchone()
-                except Exception:
-                    package = {"error": "Internal server error"}
-                    response = json.dumps(package)
-
-                    self.send_response(500)
-                    self.send_header('Content-type', 'application/json')
-                    self.send_header("Content-Length", str(len(response)))
-                    self.end_headers()
-                    self.wfile.write(response.encode())
-                    return
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
+                return
 
             #cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
             #result = cursor.fetchone()
             if method == 'get':
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
-                    if caching and not cache_hit:
-                        # cache is FIFO
-                        if len(cache.keys()) > cache_size:
-                            cache.popitem(last=False)
-                            cache[key] = result
-                        else:
-                            cache[key] = result
+                    # if caching and not cache_hit:
+                    #     # cache is FIFO
+                    #     if len(cache.keys()) > cache_size:
+                    #         cache.popitem(last=False)
+                    #         cache[key] = result
+                    #     else:
+                    #         cache[key] = result
 
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
@@ -273,8 +273,8 @@ class HandleRequests(BaseHTTPRequestHandler):
                     try:
                         cursor.execute('''UPDATE 'records' SET value = ? WHERE key = ?''', (value, key))
                         connection.commit()
-                        # update the cache
-                        cache[key] = value
+                        # # update the cache
+                        # cache[key] = value
                     except Exception:
                         package = {"error": "Internal server error"}
                         response = json.dumps(package)
@@ -323,27 +323,24 @@ def readNodes(nodes_file):
 class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
-        global nodeList
-        ip, port, nodes_file = sys.argv[1], sys.argv[2], sys.argv[3]
-        nodeList = readNodes(nodes_file)
+        global node_list
+        nodes_file, node_index = sys.argv[1], sys.argv[2]
+        node_list = readNodes(nodes_file)
+
+        node_address = node_list[int(node_index)].split()
+        ip = node_address[0]
+        port = node_address[1]
 
         dbName = port + 'kv.db'
         dbPath = os.path.join(path, dbName)
 
-        connection = sqlite3.connect(dbPath)
+        connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         cursor = connection.cursor()
-        print (nodeList)
-
-        #if len(sys.argv) > 4:
-        #    enable_cache, size = sys.argv[3], sys.argv[4]
-        #    if enable_cache == "--cache":
-        #        caching = True
-        #        cache_size = int(size)
 
         # make sure we only create the table once
         cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='records' ''')
         if cursor.fetchone()[0] == 0:
-            cursor.execute('''CREATE TABLE 'records' (key text, value text)''')
+            cursor.execute('''CREATE TABLE 'records' (key text, value text, last_update timestamp)''')
 
         server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
         print('Server initializing, reachable at http://{}:{}'.format(ip, port))

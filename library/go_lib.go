@@ -37,7 +37,7 @@ type KeyValue struct {
 }
 
 type NodeList struct {
-	NodeList []string `json: "nodes"`
+	NodeList []string `json:"nodes"`
 }
 
 type Reachable struct {
@@ -82,6 +82,11 @@ func kv739_init(server_names **C.char) int32 {
 			break
 		}
 
+		srvr := C.GoString(elem)
+		err := validateServer(srvr)
+		if err != nil {
+			return -1
+		}
 		init_list[i] = C.GoString(elem)
 		no_init += 1
 		//fmt.Printf("Element: %s\n", s)
@@ -107,6 +112,7 @@ func kv739_init(server_names **C.char) int32 {
 
 	copy(node_list[:], node_l.NodeList[:])
 	node_no = len(node_l.NodeList)
+	fmt.Printf("[Init] Total number of nodes: %v\n", node_no)
 	has_init = 1
 
 	return 0
@@ -236,6 +242,8 @@ func getNodeList(server string) (NodeList, error) {
 		fmt.Println("[getNodeList] Error unmarshalling json")
 		return NodeList{}, err
 	}
+
+	fmt.Printf("The nodelist: %v\n", nodeList)
 
 	return nodeList, nil
 }
@@ -407,6 +415,7 @@ func do_kv739_get(key *C.char, value *C.char, server string) int32 {
 	s_path := "http://" + server + "/kv739/"
 
 	reqJSON, _ := json.Marshal(m)
+	fmt.Printf("[Get] The reqJSON: %v\n", string(reqJSON))
 
 	req := fasthttp.AcquireRequest()
 	req.SetBody(reqJSON)
@@ -477,7 +486,7 @@ func kv739_put(key *C.char, value *C.char, old_value *C.char) int32 {
 		}
 	}
 
-	fmt.Println("[kv739_get] No reachable servers")
+	fmt.Println("[kv739_put] No reachable servers")
 	return -1
 
 }

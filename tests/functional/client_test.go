@@ -27,11 +27,11 @@ func TestShutdown(t *testing.T) {
 }
 
 func TestServerAddress(t *testing.T) {
-	if Kv739_init("aaaaaaaaaaaaa") != -1 {
+	if Kv739_init([]string{"aaaaaaaaaaaaa"}) != -1 {
 		t.Errorf("Failed Address Test #1")
 	}
 
-	if Kv739_init("aaaaaaaaaaaaaaaa:123asd") != -1 {
+	if Kv739_init([]string{"aaaaaaaaaaaaaaaa:123asd"}) != -1 {
 		t.Errorf("Failed Address Test #2")
 	}
 
@@ -48,7 +48,7 @@ func TestServerAddress(t *testing.T) {
 	//}
 
 	servers := []string{"127.0.0.1:5000"}
-	if Kv739_init_new(servers) != 0 {
+	if Kv739_init(servers) != 0 {
 		t.Errorf("Failed Address Test #4")
 	}
 
@@ -89,7 +89,7 @@ func launchServer(server_exe_path string, killSwitch chan int, killDB bool, cach
 		}
 	}
 
-	cmdArgs := []string{"127.0.0.1", "5000", nodes_path}
+	cmdArgs := []string{nodes_path, "0"}
 	cmdServer := exec.Command(server_exe_path, cmdArgs...)
 	if err := cmdServer.Start(); err != nil {
 		log.Printf("Failed to start cmd: %v", err)
@@ -134,7 +134,7 @@ func TestGetInputParams(t *testing.T) {
 		panic(err)
 	}
 
-	if e := Kv739_init("127.0.0.1:5000"); e != 0 {
+	if e := Kv739_init([]string{"127.0.0.1:5000"}); e != 0 {
 		panic("failed to init server")
 	}
 
@@ -215,7 +215,7 @@ func TestHalting(t *testing.T) {
 		panic(err)
 	}
 
-	if e := Kv739_init("127.0.0.1:5000"); e != 0 {
+	if e := Kv739_init([]string{"127.0.0.1:5000"}); e != 0 {
 		panic("failed to init server")
 	}
 
@@ -243,7 +243,7 @@ func TestHalting(t *testing.T) {
 		panic(err)
 	}
 
-	if e := Kv739_init("127.0.0.1:5000"); e != 0 {
+	if e := Kv739_init([]string{"127.0.0.1:5000"}); e != 0 {
 		panic("failed to init server")
 	}
 
@@ -347,7 +347,7 @@ func TestLongInput(t *testing.T) {
 		panic(err)
 	}
 
-	if e := Kv739_init("127.0.0.1:5000"); e != 0 {
+	if e := Kv739_init([]string{"127.0.0.1:5000"}); e != 0 {
 		panic("failed to init server")
 	}
 
@@ -402,4 +402,5 @@ func TestConcurrent(t *testing.T) {
 }
 */
 //func TestGet(t *testing.T) {
+
 //	launchServer(address)

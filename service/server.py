@@ -11,6 +11,7 @@ import random
 import json
 import sys
 import os
+import requests
 
 import sqlite3
 
@@ -25,8 +26,8 @@ class HandleRequests(BaseHTTPRequestHandler):
 
 
     # disable logging
-    def log_message(self, format, *args):
-        return
+    #def log_message(self, format, *args):
+    #    return
 
     def validate_string(self, string_to_validate):
         try:
@@ -59,6 +60,7 @@ class HandleRequests(BaseHTTPRequestHandler):
         global KEEP_RUNNING
         global conns
         global node_list
+        global all_list
         global node_index
         
         route = urlparse(self.path)
@@ -70,7 +72,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
         if route.path == '/nodes/':
-            response = json.dumps({"nodes" : node_list})
+            response = json.dumps({"nodes" : all_list})
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header("Content-Length", str(len(response)))
@@ -114,7 +116,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             for i in range(len(node_list)):
                 if node_list[i] is None:
                     continue
-                parts = node_list[i].split()
+                parts = node_list[i].split(':')
                 if parts[0] == host and parts[1] == port:
                     conns[i].close()
                     conns[i] = None
@@ -221,7 +223,8 @@ class HandleRequests(BaseHTTPRequestHandler):
                 valid_string = self.validate_string(value)
                 if (valid_string is not True):
                     return
-
+                
+                millisec = None
                 if result is not None:# and result[0] != value:
                     # don't waste time updating value with same value
                     if result[0] != value:
@@ -263,7 +266,21 @@ class HandleRequests(BaseHTTPRequestHandler):
                     package = {"exists": "yes", "former_value": result[0], "new_value": value}
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
-                    
+
+
+                for server in node_list:
+                    key_value = json.dumps([value,millisec,key])
+                    url = "http://" + server + "/peer_put"
+                    try:
+                        x = requests.post(url, data = key_value)
+                        if x.text == "OK":
+                            print ("Successfully pushed to " + server)
+                        else:
+                            print ("Could not push to " + server)
+                    except Exception as e:
+                        print ("Put server error: {}".format(e))
+
+
             
             response = json.dumps(package)
             self.send_response(200)
@@ -319,7 +336,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                             self.end_headers()
                             self.wfile.write(response.encode())
                             return
-                    else:
+                else:
                         try:
                             cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, millisec))
                             connection.commit()
@@ -334,6 +351,14 @@ class HandleRequests(BaseHTTPRequestHandler):
                             self.end_headers()
                             self.wfile.write(response.encode())
                             return
+
+                response = "OK"
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
+
         else:
             print("unknown route")
 
@@ -384,6 +409,7 @@ class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
         global node_list
+        global all_list
         global node_index
         global reachable_list
         global conns
@@ -391,8 +417,9 @@ class Server(ThreadingMixIn, HTTPServer):
 
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         node_list = readNodes(nodes_file)
+        all_list = [node for node in node_list]
 
-        node_address = node_list[int(node_index)].split()
+        node_address = node_list[int(node_index)].split(':')
         ip = node_address[0]
         port = node_address[1]
         
@@ -401,7 +428,7 @@ class Server(ThreadingMixIn, HTTPServer):
         for i in range(len(node_list)):
             if i == int(node_index):
                 continue
-            parts = node_list[i].split()
+            parts = node_list[i].split(':')
             conns.append(http.client.HTTPConnection(parts[0], port=parts[1]))
             print('connected to a peer')
 

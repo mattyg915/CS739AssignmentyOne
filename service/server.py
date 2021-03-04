@@ -18,8 +18,11 @@ path = os.path.dirname(os.path.abspath(__file__))
 KEEP_RUNNING = True
 ENTROPY_MAX = 1
 conn_index = 0
+conns = []
 
 class HandleRequests(BaseHTTPRequestHandler):
+
+
     # disable logging
     def log_message(self, format, *args):
         return
@@ -276,7 +279,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 entropy_counter = 0
         elif route.path == "/peer_put":
             for data in body:
-                #put each data entry into the local db
+                # put each data entry into the local db
                 value,millisec,key = data
                 print([key,value,millisec])
                 
@@ -391,7 +394,6 @@ class Server(ThreadingMixIn, HTTPServer):
         
         #setup connections to peer servers
         #we have this at each server, so 2 way connections
-        conns = []
         for i in range(len(node_list)):
             if i == int(node_index):
                 continue

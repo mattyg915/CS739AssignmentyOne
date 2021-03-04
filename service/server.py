@@ -7,6 +7,7 @@ from datetime import datetime
 
 import http.client
 
+import random
 import json
 import sys
 import os
@@ -18,7 +19,6 @@ path = os.path.dirname(os.path.abspath(__file__))
 KEEP_RUNNING = True
 ENTROPY_MAX = 1
 entropy_counter = 0
-conn_index = 0
 conns = []
 
 class HandleRequests(BaseHTTPRequestHandler):
@@ -341,16 +341,23 @@ class HandleRequests(BaseHTTPRequestHandler):
     #    return
 
     def anti_entropy(self, cursor):
-        global conn_index
         #naive algo: send entire db over
         cursor.execute('''SELECT * FROM 'records' ''')
         alldata = cursor.fetchall()
-        print(alldata[0])
         alldata_json = json.dumps(alldata)
-        print('hash over the db: '+str(hash(alldata_json)))
-        conns[conn_index].request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
-        #complex algo
-        #select a random peer server and resolve all conflicts (1-way)
+        connection = random.choice(conns)
+        success = False
+        attempt_count = 0
+        while success is not True and attempt_count < len(conns):
+            try:
+                attempt_count += 1
+                connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
+                success = True
+            except Exception:
+                success = False
+
+        # complex algo
+        # select a random peer server and resolve all conflicts (1-way)
         # assume timestamp sorted DB
         
         #share a hash to the entire db to the peer
@@ -359,8 +366,7 @@ class HandleRequests(BaseHTTPRequestHandler):
         # check complete hash again
         #if hashes still do not agree:
         # share the entire DB
-        
-        conn_index += 1
+
         return
 
 ###########end of handle request#####################

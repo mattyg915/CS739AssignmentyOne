@@ -345,15 +345,17 @@ class HandleRequests(BaseHTTPRequestHandler):
         cursor.execute('''SELECT * FROM 'records' ''')
         alldata = cursor.fetchall()
         alldata_json = json.dumps(alldata)
-        connection = random.choice(conns)
+        connections_copy = conns.copy()
         success = False
         attempt_count = 0
-        while success is not True and attempt_count < len(conns):
+        while success is not True and attempt_count < len(connections_copy):
+            connection = random.choice(connections_copy)
             try:
                 attempt_count += 1
                 connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
                 success = True
             except Exception:
+                connections_copy.remove(connection)
                 success = False
 
         # complex algo

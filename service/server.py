@@ -339,19 +339,19 @@ class HandleRequests(BaseHTTPRequestHandler):
                             return
         else:
             print("unknown route")
+
     #def broadcast(self):
     #    return
 
     def anti_entropy(self, cursor):
         global conn_index
         #naive algo: send entire db over
-        cursor.execute('''SELECT * FROM 'records''')
+        cursor.execute('''SELECT * FROM 'records' ''')
         alldata = cursor.fetchall()
         print(alldata[0])
         alldata_json = json.dumps(alldata)
         print('hash over the db: '+str(hash(alldata_json)))
-        conns[conn_index].request('PUT', '/peer_put', data = alldata_json,
-                                    headers = {'Content-Length': len(alldata_json)})
+        conns[conn_index].request('PUT', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
         #complex algo
         #select a random peer server and resolve all conflicts (1-way)
         # assume timestamp sorted DB

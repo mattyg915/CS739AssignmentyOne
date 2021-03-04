@@ -17,6 +17,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 KEEP_RUNNING = True
 ENTROPY_MAX = 1
+entropy_counter = 0
 conn_index = 0
 conns = []
 
@@ -283,11 +284,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 value,millisec,key = data
                 print([key,value,millisec])
                 
-                # validate strings
-                valid_string = self.validate_string(key)
-                if (valid_string is not True):
-                    return
-
+                # don't meed to validate strings here, this has been done already
                 query = (key,)
                 
                 try:
@@ -351,7 +348,7 @@ class HandleRequests(BaseHTTPRequestHandler):
         print(alldata[0])
         alldata_json = json.dumps(alldata)
         print('hash over the db: '+str(hash(alldata_json)))
-        conns[conn_index].request('PUT', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
+        conns[conn_index].request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
         #complex algo
         #select a random peer server and resolve all conflicts (1-way)
         # assume timestamp sorted DB
@@ -383,8 +380,7 @@ class Server(ThreadingMixIn, HTTPServer):
         global reachable_list
         global conns
         global entropy_counter
-        
-        entropy_counter = 0
+
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         node_list = readNodes(nodes_file)
 
@@ -410,7 +406,7 @@ class Server(ThreadingMixIn, HTTPServer):
         # make sure we only create the table once
         cursor.execute(''' SELECT count(name) FROM sqlite_master WHERE type='table' AND name='records' ''')
         if cursor.fetchone()[0] == 0:
-            cursor.execute('''CREATE TABLE 'records' (key text, value text, time integer )''')
+            cursor.execute('''CREATE TABLE 'records' (key text PRIMARY KEY, value text, time integer )''')
 
         server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
         print('Server initializing, reachable at http://{}:{}'.format(ip, port))

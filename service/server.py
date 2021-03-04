@@ -60,6 +60,9 @@ class HandleRequests(BaseHTTPRequestHandler):
 
     def do_GET(self):
         global KEEP_RUNNING
+        global conns
+        global node_list
+        global node_index
         
         route = urlparse(self.path)
         if route.path == '/health/':
@@ -84,8 +87,11 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             #notify all reachable hosts
+            node_address = node_list[int(node_index)].split()
+            ip = node_address[0]
+            port = node_address[1]
             for conn in conns:
-                conn.request('GET', '/death_notify')
+                conn.request('GET', '/death_notify', headers = {'host':ip , 'port':port })
                 conn.close()
             #Flush all state and die
             #skip record known hosts
@@ -93,7 +99,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             #exit()
             KEEP_RUNNING = False
         if route.path == '/die/':
-            #TODO Kill all threads and
             response = "DYING"
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
@@ -104,7 +109,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             KEEP_RUNNING = False
             exit()
         if route.path == '/death_notify/':
-            host, port = self.client_address
+            #host, port = self.client_address
+            host = self.headers.get('host')
+            port = self.headers.get('port')
             success = False
             #received a death notification, remove server from reachable
             for i in range(len(node_list)):
@@ -297,31 +304,32 @@ class HandleRequests(BaseHTTPRequestHandler):
 
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
-            elif method == 'put':
+            else:
                 value = body['value']
                 valid_string = self.validate_string(value)
                 if (valid_string is not True):
                     return
 
-                if result is not None and result[0] != value:
+                if result is not None:# and result[0] != value:
                     # don't waste time updating value with same value
-                    try:
-                        millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-                        cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''', (value, millisec, key))
-                        connection.commit()
-                        # # update the cache
-                        # cache[key] = value
-                    except Exception as e:
-                        message = "Internal server error: {}".format(e)
-                        package = {"error": message}
-                        response = json.dumps(package)
+                    if result[0] != value:
+                        try:
+                            millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+                            cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''', (value, millisec, key))
+                            connection.commit()
+                            # # update the cache
+                            # cache[key] = value
+                        except Exception as e:
+                            message = "Internal server error: {}".format(e)
+                            package = {"error": message}
+                            response = json.dumps(package)
 
-                        self.send_response(500)
-                        self.send_header('Content-type', 'application/json')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
-                        return
+                            self.send_response(500)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
+                            return
                 else:
                     try:
                         millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
@@ -343,8 +351,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                     package = {"exists": "yes", "former_value": result[0], "new_value": value}
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
-            elif method == 'peer_put':
-                print('not ready yet')
+                    
             
             response = json.dumps(package)
             self.send_response(200)
@@ -359,7 +366,68 @@ class HandleRequests(BaseHTTPRequestHandler):
                 # clear up entropy
                 self.anti_entropy(cursor)
                 entropy_counter = 0
+        elif route.path == "/peer_put":
+            for data in body:
+                #put each data entry into the local db
+                value,millisec,key = data
+                print([key,value,millisec])
+                
+                # validate strings
+                valid_string = self.validate_string(key)
+                if (valid_string is not True):
+                    return
 
+                query = (key,)
+                
+                try:
+                cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                result = cursor.fetchone()
+                except Exception as e:
+                    message = "Internal server error: {}".format(e)
+                    package = {"error": message}
+                    response = json.dumps(package)
+
+                    self.send_response(500)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header("Content-Length", str(len(response)))
+                    self.end_headers()
+                    self.wfile.write(response.encode())
+                    return
+                
+                # don't waste time updating value with same value or with a later local timestamp
+                if result is not None:
+                    if result[0] != value and int(result[1]) < millisec:
+                        try:
+                                cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''', (value, millisec, key))
+                                connection.commit()
+                            except Exception as e:
+                                message = "Internal server error: {}".format(e)
+                                package = {"error": message}
+                                response = json.dumps(package)
+
+                                self.send_response(500)
+                                self.send_header('Content-type', 'application/json')
+                                self.send_header("Content-Length", str(len(response)))
+                                self.end_headers()
+                                self.wfile.write(response.encode())
+                                return
+                    else:
+                        try:
+                            cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, millisec))
+                            connection.commit()
+                        except Exception as e:
+                            message = "Internal server error: {}".format(e)
+                            package = {"error": message}
+                            response = json.dumps(package)
+
+                            self.send_response(500)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
+                            return
+        else:
+            print("unknown route")
     #def broadcast(self):
     #    return
 
@@ -368,7 +436,11 @@ class HandleRequests(BaseHTTPRequestHandler):
         #naive algo: send entire db over
         cursor.execute('''SELECT * FROM 'records''')
         alldata = cursor.fetchall()
-        conns[conn_index].request('PUT', '/peer_put', data = alldata)
+        print(alldata[0])
+        alldata_json = json.dumps(alldata)
+        print('hash over the db: '+str(hash(alldata_json)))
+        conns[conn_index].request('PUT', '/peer_put', data = alldata_json,
+                                    headers = {'Content-Length': len(alldata_json)})
         #complex algo
         #select a random peer server and resolve all conflicts (1-way)
         # assume timestamp sorted DB
@@ -396,6 +468,7 @@ class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
         global node_list
+        global node_index
         global reachable_list
         global conns
         global entropy_counter
@@ -407,8 +480,6 @@ class Server(ThreadingMixIn, HTTPServer):
         node_address = node_list[int(node_index)].split()
         ip = node_address[0]
         port = node_address[1]
-        
-        
         
         #setup connections to peer servers
         #we have this at each server, so 2 way connections

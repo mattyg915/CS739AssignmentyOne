@@ -21,11 +21,11 @@ path = os.path.dirname(os.path.abspath(__file__))
 # cache = OrderedDict()
 
 KEEP_RUNNING = True
-ENTROPY_MAX = 1000
+ENTROPY_MAX = 1
+conn_index = 0
 
 class HandleRequests(BaseHTTPRequestHandler):
 
-    conn_index = 0
 
     # disable logging
     def log_message(self, format, *args):
@@ -59,6 +59,8 @@ class HandleRequests(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
+        global KEEP_RUNNING
+        
         route = urlparse(self.path)
         if route.path == '/health/':
             response = "OK"
@@ -83,7 +85,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             #notify all reachable hosts
             for conn in conns:
-                conn.request('GET', 'death_notify')
+                conn.request('GET', '/death_notify')
                 conn.close()
             #Flush all state and die
             #skip record known hosts
@@ -295,7 +297,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
-            else:
+            elif method == 'put':
                 value = body['value']
                 valid_string = self.validate_string(value)
                 if (valid_string is not True):
@@ -341,7 +343,9 @@ class HandleRequests(BaseHTTPRequestHandler):
                     package = {"exists": "yes", "former_value": result[0], "new_value": value}
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
-
+            elif method == 'peer_put':
+                print('not ready yet')
+            
             response = json.dumps(package)
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
@@ -353,24 +357,28 @@ class HandleRequests(BaseHTTPRequestHandler):
             
             if entropy_counter > ENTROPY_MAX:
                 # clear up entropy
-                self.anti_entropy()
+                self.anti_entropy(cursor)
                 entropy_counter = 0
 
-    def broadcast(self):
-        return
+    #def broadcast(self):
+    #    return
 
-    def anti_entropy(self):
+    def anti_entropy(self, cursor):
+        global conn_index
+        #naive algo: send entire db over
+        cursor.execute('''SELECT * FROM 'records''')
+        alldata = cursor.fetchall()
+        conns[conn_index].request('PUT', '/peer_put', data = alldata)
+        #complex algo
         #select a random peer server and resolve all conflicts (1-way)
         # assume timestamp sorted DB
         
         #share a hash to the entire db to the peer
         #if hashes do not agree:
-        # share the latest ENTROPY_MAX records
+        # share the latest ENTROPY_MAX records as a temporary .db
         # check complete hash again
         #if hashes still do not agree:
         # share the entire DB
-        
-        conn[conn_index]
         
         conn_index += 1
         return
@@ -406,10 +414,11 @@ class Server(ThreadingMixIn, HTTPServer):
         #we have this at each server, so 2 way connections
         conns = []
         for i in range(len(node_list)):
-            if i == node_index:
+            if i == int(node_index):
                 continue
             parts = node_list[i].split()
             conns.append(http.client.HTTPConnection(parts[0], port=parts[1]))
+            print('connected to a peer')
 
 
 

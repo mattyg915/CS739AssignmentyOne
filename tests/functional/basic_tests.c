@@ -1,5 +1,8 @@
 #include "lib739kv.h"
+#include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
 //using at most 5 servers in tests
 //format: "host:port"
@@ -54,13 +57,14 @@ void test_availability()
 //connect to just one server, restart it
 // check persistence on the same node
 
-int main()
+int main(int argc, char** argv)
 {
     //usage: ./basic_tests serverlist.lst
     
     
     ssize_t read;
     char * line = NULL;
+    size_t len = 0;
     
     FILE *fp = fopen(argv[1], "r");
     
@@ -68,18 +72,26 @@ int main()
 	int count = 0;
     while ((read = getline(&line, &len, fp)) != -1) 
     {
-        char* server = strdup(read);
+        char* server = strdup(line);
         server[strcspn(server, "\n")] = 0;
         server_names[count] = server;
         count++;
+        printf("%s\n", server);
     }
     
+    server_names[count] = NULL;
+    
+    kv739_init(server_names);
     
     //run tests
-    
+    //char* key = NULL;
+    //char* val = NULL;
+	char value[2049];
+    kv739_put("key", "val", value);
     //when a test returns, pause and rennovate severs if needed
     
     
+    kv739_shutdown();
     
     //free server list
     int i = 0;

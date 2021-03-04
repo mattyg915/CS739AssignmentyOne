@@ -4,9 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 
-//using at most 5 servers in tests
+//using at most 2 servers in tests
 //format: "host:port"
-const char* server_names[5];
+const char* server_names[3];
 
 //preferably try a DNS hostname
 void test_initshutdown()
@@ -76,21 +76,31 @@ int main(int argc, char** argv)
         server[strcspn(server, "\n")] = 0;
         server_names[count] = server;
         count++;
-        printf("%s\n", server);
+        //printf("%s\n", server);
     }
     
     server_names[count] = NULL;
     
+    int j = 0;
+    for (;j<count;j++)
+    {
+        printf("%s\n", server_names[j]);
+    }
+    
+    printf("init\n");
     kv739_init(server_names);
     
     //run tests
     //char* key = NULL;
     //char* val = NULL;
-	char value[2049];
+    char value[2049];
+    printf("put\n");
     kv739_put("key", "val", value);
+    printf("get\n");
+    kv739_get("key", value);
     //when a test returns, pause and rennovate severs if needed
     
-    
+    printf("shutdown\n");
     kv739_shutdown();
     
     //free server list

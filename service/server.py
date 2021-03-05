@@ -459,7 +459,7 @@ class Server(ThreadingMixIn, HTTPServer):
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         if len(sys.argv) == 4:
             ENTROPY_MAX = float(sys.argv[3])
-        print('default anti entropy interval: %d' % ENTROPY_MAX)
+        print('default anti entropy interval: %d s' % ENTROPY_MAX)
         node_list = readNodes(nodes_file)
         
         # record self ip and port

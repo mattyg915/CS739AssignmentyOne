@@ -85,17 +85,15 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             #notify all reachable hosts
-            #node_address = node_dict(self_ip).split()
-            #ip = self_ip
             port = node_dict(self_ip)
             for node in node_dict.keys():
-                #if node = None:
-                #    continue
-                #parts = node.split(':')
-                conn = http.client.HTTPConnection(node, port=node_dict(node))
-                conn.request('GET', '/die_notify', headers = {'host':self_ip , 'port':port })
-                conn.close()
-                print('clean die_notify to '+node)
+                try:
+                    conn = http.client.HTTPConnection(node, port=node_dict(node))
+                    conn.request('GET', '/die_notify', headers = {'host':self_ip , 'port':port })
+                    conn.close()
+                    print('clean die_notify to '+node)
+                except Exception:
+                    print('unable to die_notify node '+node)
             KEEP_RUNNING = False
             exit()
         if route.path == '/die/':
@@ -110,7 +108,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             shutdown() #not sure if this works
             exit()
         if route.path == '/die_notify/':
-            #host, port = self.client_address
             host = self.headers.get('host')
             port = self.headers.get('port')
             #received a death notification, remove server from reachable
@@ -119,6 +116,8 @@ class HandleRequests(BaseHTTPRequestHandler):
                 print('successfully removed a server from reachable: host = %s, port = %s' % (host, port))
             else:
                 print('unexpected death notifcation from: host = %s, port = %s' % (host, port))
+
+
 
     def do_POST(self):
         try:
@@ -219,7 +218,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                     return
                 
                 millisec = None
-                if result is not None:# and result[0] != value:
+                if result is not None:
                     # don't waste time updating value with same value
                     if result[0] != value:
                         try:
@@ -363,23 +362,27 @@ class HandleRequests(BaseHTTPRequestHandler):
     #    return
 
     def anti_entropy(self, cursor):
+    
         #naive algo: send entire db over
         cursor.execute('''SELECT * FROM 'records' ''')
         alldata = cursor.fetchall()
         alldata_json = json.dumps(alldata)
-        connections_copy = conns.copy()
         success = False
         attempt_count = 0
-        while success is not True and attempt_count < len(connections_copy):
-            connection = random.choice(connections_copy)
+        
+        global node_dict
+        while success is not True and attempt_count < len(node_dict.keys()):
+            node = random.choice(node_dict.keys())
             try:
                 attempt_count += 1
+                connection = http.client.HTTPConnection(node, port=node_dict(node))
                 connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
+                connection.close()
                 success = True
             except Exception:
-                connections_copy.remove(connection)
+                node_dict.pop(node)
+                print('unable to reach node %s, removed from reachable list... ' %node)
                 success = False
-
         # complex algo
         # select a random peer server and resolve all conflicts (1-way)
         # assume timestamp sorted DB

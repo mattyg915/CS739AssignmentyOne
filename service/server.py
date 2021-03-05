@@ -70,13 +70,16 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
         if route.path == '/nodes/':
-            #response = json.dumps({"nodes" : all_list})
-            response = json.dumps({"nodes" : node_dict})
+            node_list = []
+            for node in node_dict.keys():
+                node_list.append(node+':'+node_dict[node])
+            response = json.dumps({"nodes" : node_list})
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
+            print(response)
         if route.path == '/die_clean/':
             response = "DYING"
             self.send_response(200)
@@ -292,10 +295,13 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.anti_entropy(cursor)
                 entropy_counter = time.perf_counter() * 1000
         elif route.path == "/peer_put":
+            print('received peer_put...')
+            #print(body)
             for data in body:
                 # put each data entry into the local db
-                value,millisec,key = data
-                print([key,value,millisec])
+                #print('data:'+str(data))
+                key,value,millisec = data
+                #print([key,value,millisec])
                 
                 # don't meed to validate strings here, this has been done already
                 query = (key,)
@@ -381,14 +387,15 @@ class HandleRequests(BaseHTTPRequestHandler):
         attempt_count = 0
         
         global node_dict
-        while success is not True and attempt_count < len(node_dict.keys()):
-            node = random.choice(node_dict.keys())
+        while success is not True and attempt_count < len(node_dict):
+            node = random.choice(list(node_dict.keys()))
             try:
                 attempt_count += 1
-                connection = http.client.HTTPConnection(node, port=node_dict(node))
+                connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
                 connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
                 connection.close()
                 success = True
+                print('Executed anti entropy with node %s' %node)
             except Exception:
                 node_dict.pop(node)
                 print('unable to reach node %s, removed from reachable list... ' %node)

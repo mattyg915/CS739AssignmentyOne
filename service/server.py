@@ -258,7 +258,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
 
-                #a broadcast of put?
+                # a broadcast of put?
                 # for node in node_dict:
                 #     key_value = json.dumps([value,millisec,key])
                 #     url = "http://" + node + "/peer_put"

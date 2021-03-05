@@ -92,9 +92,13 @@ class HandleRequests(BaseHTTPRequestHandler):
             for node in node_dict.keys():
                 try:
                     conn = http.client.HTTPConnection(node, port=node_dict(node))
-                    conn.request('GET', '/die_notify', headers={'host': self_ip, 'port': port})
+                    conn.request('GET', '/die_notify/', headers={'host': self_ip, 'port': port})
+                    http_response = connection.getresponse()
                     conn.close()
-                    print('clean die_notify to '+node)
+                    if http_response.status == 200:
+                        print('clean die_notify to '+node)
+                    else:
+                        print('Error clean die_notify to node %s, response status %d' % (node, http_response.status))
                 except Exception:
                     print('unable to die_notify node '+node)
             KEEP_RUNNING = False
@@ -209,7 +213,14 @@ class HandleRequests(BaseHTTPRequestHandler):
                     package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
 
                 else:
-                    package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
+                    #broadcast and try to forward result
+                    remote_result = self.broadcast_get(key)
+                    print(remote_result)
+                    if result is not None:
+                        package = {"exists": "yes", "former_value": remote_result[0], "new_value": "[]"}
+                        #should also add to local db, but get does not supply timestamp, skipped now
+                    else:
+                        package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
             else:
                 value = body['value']
                 valid_string = self.validate_string(value)
@@ -283,10 +294,10 @@ class HandleRequests(BaseHTTPRequestHandler):
             
             global entropy_counter
             global entropy_lock
-            print('entro'+str(entropy_counter))
+            #print('entro'+str(entropy_counter))
             current = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-            print('curr'+str(current))
-            print(entropy_lock)
+            #print('curr'+str(current))
+            #print(entropy_lock)
             if (current - entropy_counter) > ENTROPY_MAX and not entropy_lock:
                 entropy_lock = True
                 # clear up entropy
@@ -294,7 +305,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.anti_entropy(cursor)
                 entropy_counter = current
                 entropy_lock = False
-        elif route.path == "/peer_put":
+        elif route.path == "/peer_put/":
             print('received peer_put...')
             # print(body)
             for data in body:
@@ -360,7 +371,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(response)))
                 self.end_headers()
                 self.wfile.write(response.encode())
-        elif route.path == "/partition":
+        elif route.path == "/partition/":
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
             global node_dict
@@ -374,8 +385,34 @@ class HandleRequests(BaseHTTPRequestHandler):
         else:
             print("unknown route")
 
-    # def broadcast(self):
-    #    return
+    def broadcast_get(self, key):
+        print('enter broadcast get with key %s' % (key))
+        #the current server acts as agent that forwards the first none empty result from other servers
+        package = {'method':'get', 'key':key}
+        package_json = json.dumps(alldata)
+        for node in node_dict.keys():
+                try:
+                    conn = http.client.HTTPConnection(node, port=node_dict(node))
+                    conn.request('POST', '/kv739/', package_json, {'Content-Length': len(alldata_json)})
+                    http_response = connection.getresponse()
+                    conn.close()
+                    
+                    if http_response.status == 200:
+                        print('Forwarded value with key %s from node %s' % (key, node))
+                        print(http_response)
+                        content_len = int(http_response.getheaders('Content-Length'))
+                        post_body = http_response.read(content_len)
+                        decoded_body = post_body.decode()
+                        body = json.loads(decoded_body)
+                        value = body['value']
+                        if value is not None or value != '':
+                            return value
+                    else:
+                        print('Error when executing broadcast get with node %s, response status %d' % (node, http_response.status))
+                        
+                except Exception:
+                    print('unable to die_notify node '+node)
+        return None
 
     def anti_entropy(self, cursor):
     
@@ -392,7 +429,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             try:
                 attempt_count += 1
                 connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
-                connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
+                connection.request('POST', '/peer_put/', alldata_json, {'Content-Length': len(alldata_json)})
                 http_response = connection.getresponse()
                 if http_response.status == 200:
                     print('Executed anti entropy with node %s' % node)

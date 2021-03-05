@@ -359,7 +359,10 @@ class HandleRequests(BaseHTTPRequestHandler):
             #i.e. ['snare-01':'5000', 'royal-01':'5000']
             global node_dict
             if 'reachable' in body:
-                node_dict = dict(body['reachable'])
+                node_dict = dict()
+                for node in body['reachable']:
+                    ip, port = node.split(':')
+                    node_dict[ip] = port
             else:
                 print('error: reachable list not found')
         else:

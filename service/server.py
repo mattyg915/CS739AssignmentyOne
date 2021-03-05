@@ -354,7 +354,11 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(response)))
                 self.end_headers()
                 self.wfile.write(response.encode())
-
+        elif route.path == "/partition":
+            #body should contain a dict of reachable nodes
+            #i.e. ['snare-01':'5000', 'royal-01':'5000']
+            global node_dict
+            node_dict = dict(body)
         else:
             print("unknown route")
 

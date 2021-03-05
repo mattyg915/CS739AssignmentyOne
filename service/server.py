@@ -182,7 +182,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
             # validate strings
             valid_string = self.validate_string(key)
-            if (valid_string is not True):
+            if valid_string is not True:
                 return
 
             query = (key,)
@@ -395,7 +395,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
                 http_response = connection.getresponse()
                 if http_response.status == 200:
-                    print('Executed anti entropy with node %s' %node)
+                    print('Executed anti entropy with node %s' % node)
                 else:
                     print('Error when executing anti entropy with node %s, response status %d' % (node, http_response.status))
                 
@@ -403,7 +403,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 success = True
             except Exception:
                 node_dict.pop(node)
-                print('unable to reach node %s, removed from reachable list... ' %node)
+                print('unable to reach node %s, removed from reachable list... ' % node)
                 success = False
         # complex algo
         # select a random peer server and resolve all conflicts (1-way)
@@ -418,7 +418,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
         return
 
-########### end of handle request #####################
+# ------------ end of handle request ------------
 
 
 def readNodes(nodes_file):

@@ -91,8 +91,8 @@ class HandleRequests(BaseHTTPRequestHandler):
             port = node_dict[self_ip]
             for node in node_dict.keys():
                 try:
-                    conn = http.client.HTTPConnection(node, port=node_dict(node))
-                    conn.request('GET', '/die_notify', headers={'host': self_ip, 'port': port})
+                    conn = http.client.HTTPConnection(node, node_dict[node])
+                    conn.request('GET', '/die_notify', {'host': self_ip, 'port': port})
                     conn.close()
                     print('clean die_notify to '+node)
                 except Exception:
@@ -467,6 +467,7 @@ class Server(ThreadingMixIn, HTTPServer):
         # server.serve_forever()
         
         entropy_counter = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+        print(entropy_counter)
         global KEEP_RUNNING
         try:
             while KEEP_RUNNING:

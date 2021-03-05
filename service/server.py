@@ -6,6 +6,8 @@ from socketserver import ThreadingMixIn
 from datetime import datetime
 
 import http.client
+import threading
+import time
 
 import random
 import json
@@ -18,7 +20,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 dbPath = ""
 KEEP_RUNNING = True
-ENTROPY_MAX = 1000  # in millisecs
+ENTROPY_MAX = 1  # in seconds
 # entropy_counter = None #last time anti_entroy was triggered in millisecs
 entropy_lock = False  # in case the previous anti entropy is unfinished, do not start the next yet
 node_dict = dict()
@@ -91,8 +93,8 @@ class HandleRequests(BaseHTTPRequestHandler):
             port = node_dict[self_ip]
             for node in node_dict.keys():
                 try:
-                    conn = http.client.HTTPConnection(node, node_dict[node])
-                    conn.request('GET', '/die_notify', {'host': self_ip, 'port': port})
+                    conn = http.client.HTTPConnection(node, port=node_dict(node))
+                    conn.request('GET', '/die_notify', headers={'host': self_ip, 'port': port})
                     conn.close()
                     print('clean die_notify to '+node)
                 except Exception:
@@ -281,7 +283,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             
-            global entropy_counter
+            '''global entropy_counter
             global entropy_lock
             print('entro'+str(entropy_counter))
             current = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
@@ -293,7 +295,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 print('executing anti entropy with entropy_counter=%d and current=%d' %(entropy_counter, current))
                 self.anti_entropy(cursor)
                 entropy_counter = current
-                entropy_lock = False
+                entropy_lock = False'''
         elif route.path == "/peer_put":
             print('received peer_put...')
             # print(body)
@@ -353,13 +355,13 @@ class HandleRequests(BaseHTTPRequestHandler):
                             self.end_headers()
                             self.wfile.write(response.encode())
                             return
-
-                response = "OK"
-                self.send_response(200)
-                self.send_header('Content-type', 'text/plain')
-                self.send_header("Content-Length", str(len(response)))
-                self.end_headers()
-                self.wfile.write(response.encode())
+                            
+            response = "OK"
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
         elif route.path == "/partition":
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
@@ -377,49 +379,66 @@ class HandleRequests(BaseHTTPRequestHandler):
     # def broadcast(self):
     #    return
 
-    def anti_entropy(self, cursor):
     
-        # naive algo: send entire db over
-        cursor.execute('''SELECT * FROM 'records' ''')
-        alldata = cursor.fetchall()
-        alldata_json = json.dumps(alldata)
-        success = False
-        attempt_count = 0
-        
-        global node_dict
-        while success is not True and attempt_count < len(node_dict):
-            node = random.choice(list(node_dict.keys()))
-            try:
-                attempt_count += 1
-                connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
-                connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
-                http_response = connection.getresponse()
-                if http_response.status == 200:
-                    print('Executed anti entropy with node %s' % node)
-                else:
-                    print('Error when executing anti entropy with node %s, response status %d' % (node, http_response.status))
-                
-                connection.close()
-                success = True
-            except Exception:
-                node_dict.pop(node)
-                print('unable to reach node %s, removed from reachable list... ' % node)
-                success = False
-        # complex algo
-        # select a random peer server and resolve all conflicts (1-way)
-        # assume timestamp sorted DB
-        
-        # share a hash to the entire db to the peer
-        # if hashes do not agree:
-        # share the latest ENTROPY_MAX records as a temporary .db
-        # check complete hash again
-        # if hashes still do not agree:
-        # share the entire DB
-
-        return
 
 # ------------ end of handle request ------------
+def anti_entropy(cursor):
+    # naive algo: send entire db over
+    cursor.execute('''SELECT * FROM 'records' ''')
+    alldata = cursor.fetchall()
+    alldata_json = json.dumps(alldata)
+    success = False
+    attempt_count = 0
+    
+    global node_dict
+    while success is not True and attempt_count < len(node_dict):
+        node = random.choice(list(node_dict.keys()))
+        attempt_count += 1
+        connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
+        connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
+        http_response = connection.getresponse()
+        try:
+            if http_response.status == 200:
+                print('Executed anti entropy with node %s' % node)
+            else:
+                print('Error when executing anti entropy with node %s, response status %d' % (node, http_response.status))
+            
+            connection.close()
+            success = True
+        except Exception:
+            node_dict.pop(node)
+            print('unable to reach node %s, removed from reachable list... ' % node)
+            success = False
+    # complex algo
+    # select a random peer server and resolve all conflicts (1-way)
+    # assume timestamp sorted DB    
+    # share a hash to the entire db to the peer
+    # if hashes do not agree:
+    # share the latest ENTROPY_MAX records as a temporary .db
+    # check complete hash again
+    # if hashes still do not agree:
+    # share the entire DB
+    return
 
+def anti_entropy_wrapper():
+        #give some time to start peer servers
+        time.sleep(5)
+        connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+        cursor = connection.cursor()
+        while True:
+            time.sleep(ENTROPY_MAX)
+            anti_entropy(cursor)
+        try:  
+            connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+            cursor = connection.cursor()
+            while True:
+                time.sleep(ENTROPY_MAX)
+                anti_entropy(cursor)
+        except Exception:
+            print("error opening database connection")
+        
+
+        
 
 def readNodes(nodes_file):
     f = open(nodes_file, "r")
@@ -435,8 +454,12 @@ class Server(ThreadingMixIn, HTTPServer):
         global node_dict
         global self_ip
         global entropy_counter
+        global ENTROPY_MAX
 
         nodes_file, node_index = sys.argv[1], sys.argv[2]
+        if len(sys.argv) == 4:
+            ENTROPY_MAX = int(sys.argv[3])
+        print('default anti entropy interval: %d' % ENTROPY_MAX)
         node_list = readNodes(nodes_file)
         
         # record self ip and port
@@ -464,10 +487,12 @@ class Server(ThreadingMixIn, HTTPServer):
 
         server = ThreadingHTTPServer((self_ip, int(port)), HandleRequests)
         print('Server initializing, reachable at http://{}:{}'.format(self_ip, port))
-        # server.serve_forever()
         
         entropy_counter = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-        print(entropy_counter)
+        
+        #start auto anti entropy
+        threading.Thread(target=anti_entropy_wrapper).start()
+        #start server
         global KEEP_RUNNING
         try:
             while KEEP_RUNNING:

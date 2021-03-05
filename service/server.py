@@ -108,7 +108,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             
             KEEP_RUNNING = False
-            shutdown() #not sure if this works
             exit()
         if route.path == '/die_notify/':
             host = self.headers.get('host')

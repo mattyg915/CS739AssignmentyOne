@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 from socketserver import ThreadingMixIn
 from datetime import datetime
 
+import time
 import http.client
 
 import random
@@ -18,9 +19,8 @@ import sqlite3
 path = os.path.dirname(os.path.abspath(__file__))
 
 KEEP_RUNNING = True
-ENTROPY_MAX = 1
-entropy_counter = 0
-conns = []
+ENTROPY_MAX = 1000 #in millisecs
+entropy_counter = time.perf_counter() * 1000 #last time anti_entroy was triggered in millisecs
 
 class HandleRequests(BaseHTTPRequestHandler):
 
@@ -58,10 +58,8 @@ class HandleRequests(BaseHTTPRequestHandler):
 
     def do_GET(self):
         global KEEP_RUNNING
-        global conns
-        global node_list
-        global all_list
-        global node_index
+        global node_dict
+        global self_ip
         
         route = urlparse(self.path)
         if route.path == '/health/':
@@ -72,7 +70,8 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
         if route.path == '/nodes/':
-            response = json.dumps({"nodes" : all_list})
+            #response = json.dumps({"nodes" : all_list})
+            response = json.dumps({"nodes" : node_dict})
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header("Content-Length", str(len(response)))
@@ -86,17 +85,19 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             #notify all reachable hosts
-            node_address = node_list[int(node_index)].split()
-            ip = node_address[0]
-            port = node_address[1]
-            for conn in conns:
-                conn.request('GET', '/death_notify', headers = {'host':ip , 'port':port })
+            #node_address = node_dict(self_ip).split()
+            #ip = self_ip
+            port = node_dict(self_ip)
+            for node in node_dict.keys():
+                #if node = None:
+                #    continue
+                #parts = node.split(':')
+                conn = http.client.HTTPConnection(node, port=node_dict(node))
+                conn.request('GET', '/die_notify', headers = {'host':self_ip , 'port':port })
                 conn.close()
-            #Flush all state and die
-            #skip record known hosts
-            #shutdown()
-            #exit()
+                print('clean die_notify to '+node)
             KEEP_RUNNING = False
+            exit()
         if route.path == '/die/':
             response = "DYING"
             self.send_response(200)
@@ -106,25 +107,18 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             
             KEEP_RUNNING = False
+            shutdown() #not sure if this works
             exit()
-        if route.path == '/death_notify/':
+        if route.path == '/die_notify/':
             #host, port = self.client_address
             host = self.headers.get('host')
             port = self.headers.get('port')
-            success = False
             #received a death notification, remove server from reachable
-            for i in range(len(node_list)):
-                if node_list[i] is None:
-                    continue
-                parts = node_list[i].split(':')
-                if parts[0] == host and parts[1] == port:
-                    conns[i].close()
-                    conns[i] = None
-                    node_list[i] = None
-                    success = True
-                    break
-                if success:
-                    print("successfully removed a server from reachable: host = %s, port = %d" % (host, port))
+            if host in node_dict.keys():
+                node_dict.pop(node)
+                print('successfully removed a server from reachable: host = %s, port = %s' % (host, port))
+            else:
+                print('unexpected death notifcation from: host = %s, port = %s' % (host, port))
 
     def do_POST(self):
         try:
@@ -267,18 +261,21 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
 
-
-                for server in node_list:
+                #a broadcast of put?
+                '''for node in node_dict:
                     key_value = json.dumps([value,millisec,key])
-                    url = "http://" + server + "/peer_put"
+                    url = "http://" + node + "/peer_put"
                     try:
+                        conn = http.client.HTTPConnection(node, port=node_dict(node))
+                        conn.request('GET', '/peer_put', headers = {'host':self_ip , 'port':port })
+                        conn.close()
                         x = requests.post(url, data = key_value)
                         if x.text == "OK":
-                            print ("Successfully pushed to " + server)
+                            print ("Successfully pushed to " + node)
                         else:
-                            print ("Could not push to " + server)
+                            print ("Could not push to " + node)
                     except Exception as e:
-                        print ("Put server error: {}".format(e))
+                        print ("Put server error: {}".format(e))'''
 
 
             
@@ -288,13 +285,13 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-            global entropy_counter
-            entropy_counter += 1
             
-            if entropy_counter > ENTROPY_MAX:
+            global entropy_counter
+            current = time.perf_counter() * 1000 - entropy_counter
+            if current > ENTROPY_MAX:
                 # clear up entropy
                 self.anti_entropy(cursor)
-                entropy_counter = 0
+                entropy_counter = time.perf_counter() * 1000
         elif route.path == "/peer_put":
             for data in body:
                 # put each data entry into the local db
@@ -408,30 +405,30 @@ def readNodes(nodes_file):
 class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
-        global node_list
-        global all_list
-        global node_index
-        global reachable_list
-        global conns
+        global node_dict
+        global self_ip
         global entropy_counter
 
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         node_list = readNodes(nodes_file)
-        all_list = [node for node in node_list]
-
-        node_address = node_list[int(node_index)].split(':')
-        ip = node_address[0]
-        port = node_address[1]
         
-        #setup connections to peer servers
-        #we have this at each server, so 2 way connections
+        #record self ip and port
+        node_address = node_list[int(node_index)].split(':')
+        self_ip = node_address[0]
+        port = node_address[1]
+        node_dict = dict()
         for i in range(len(node_list)):
-            if i == int(node_index):
-                continue
             parts = node_list[i].split(':')
-            conns.append(http.client.HTTPConnection(parts[0], port=parts[1]))
-            print('connected to a peer')
-
+            ip = parts[0]
+            port = parts[1]
+            node_dict[ip] = port
+        print(node_dict)
+        
+        #remove self from nodelist
+        node_dict.pop(self_ip)
+        
+        
+        
         dbName = port + 'kv.db'
         dbPath = os.path.join(path, dbName)
 
@@ -443,9 +440,12 @@ class Server(ThreadingMixIn, HTTPServer):
         if cursor.fetchone()[0] == 0:
             cursor.execute('''CREATE TABLE 'records' (key text PRIMARY KEY, value text, time integer )''')
 
-        server = ThreadingHTTPServer((ip, int(port)), HandleRequests)
-        print('Server initializing, reachable at http://{}:{}'.format(ip, port))
+        server = ThreadingHTTPServer((self_ip, int(port)), HandleRequests)
+        print('Server initializing, reachable at http://{}:{}'.format(self_ip, port))
         #server.serve_forever()
+        
+        entropy_counter = time.perf_counter() * 1000
+        
         global KEEP_RUNNING
         try:
             while KEEP_RUNNING:

@@ -5,7 +5,6 @@ from urllib.parse import urlparse
 from socketserver import ThreadingMixIn
 from datetime import datetime
 
-import time
 import http.client
 
 import random
@@ -20,7 +19,8 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 KEEP_RUNNING = True
 ENTROPY_MAX = 1000 #in millisecs
-entropy_counter = time.perf_counter() * 1000 #last time anti_entroy was triggered in millisecs
+#entropy_counter = None #last time anti_entroy was triggered in millisecs
+entropy_lock = False # in case the previous anti entropy is unfinished, do not start the next yet
 
 class HandleRequests(BaseHTTPRequestHandler):
 
@@ -289,11 +289,18 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             
             global entropy_counter
-            current = time.perf_counter() * 1000 - entropy_counter
-            if current > ENTROPY_MAX:
+            global entropy_lock
+            print('entro'+str(entropy_counter))
+            current = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+            print('curr'+str(current))
+            print(entropy_lock)
+            if (current - entropy_counter) > ENTROPY_MAX and not entropy_lock:
+                entropy_lock = True
                 # clear up entropy
+                print('executing anti entropy with entropy_counter=%d and current=%d' %(entropy_counter, current))
                 self.anti_entropy(cursor)
-                entropy_counter = time.perf_counter() * 1000
+                entropy_counter = current
+                entropy_lock = False
         elif route.path == "/peer_put":
             print('received peer_put...')
             #print(body)
@@ -393,9 +400,14 @@ class HandleRequests(BaseHTTPRequestHandler):
                 attempt_count += 1
                 connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
                 connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
+                http_response = connection.getresponse()
+                if http_response.status == 200:
+                    print('Executed anti entropy with node %s' %node)
+                else:
+                    print('Error when executing anti entropy with node %s, response status %d' % (node, http_response.status))
+                
                 connection.close()
                 success = True
-                print('Executed anti entropy with node %s' %node)
             except Exception:
                 node_dict.pop(node)
                 print('unable to reach node %s, removed from reachable list... ' %node)
@@ -464,8 +476,8 @@ class Server(ThreadingMixIn, HTTPServer):
         print('Server initializing, reachable at http://{}:{}'.format(self_ip, port))
         #server.serve_forever()
         
-        entropy_counter = time.perf_counter() * 1000
-        
+        entropy_counter = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+        print(entropy_counter)
         global KEEP_RUNNING
         try:
             while KEEP_RUNNING:

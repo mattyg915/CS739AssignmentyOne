@@ -358,7 +358,10 @@ class HandleRequests(BaseHTTPRequestHandler):
             #body should contain a dict of reachable nodes
             #i.e. ['snare-01':'5000', 'royal-01':'5000']
             global node_dict
-            node_dict = dict(body)
+            if 'reachable' in body:
+                node_dict = dict(body['reachable'])
+            else:
+                print('error: reachable list not found')
         else:
             print("unknown route")
 

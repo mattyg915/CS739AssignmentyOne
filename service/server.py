@@ -385,8 +385,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-        elif route.path == "/partition":
+        elif route.path == "/partition/":
             print("partitioning")
+            print(body)
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
             global self_ip
@@ -394,6 +395,8 @@ class HandleRequests(BaseHTTPRequestHandler):
             if 'reachable' in body:
                 node_dict = dict()
                 for node in body['reachable']:
+                    if node == '':
+                        continue
                     ip, port = node.split(':')
                     #don't add self
                     if self_ip != ip or self_port != port:

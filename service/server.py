@@ -61,6 +61,7 @@ class HandleRequests(BaseHTTPRequestHandler):
     def do_GET(self):
         global KEEP_RUNNING
         global node_dict
+        #reflects initial list only
         global node_list
         global self_ip
         
@@ -388,7 +389,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             print("partitioning")
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
-            global node_dict
             global self_ip
             global self_port
             if 'reachable' in body:

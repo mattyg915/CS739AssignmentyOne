@@ -96,7 +96,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             for node in node_dict.keys():
                 try:
                     #try only once
-                    conn = http.client.HTTPConnection(node, port=node_dict(node))
+                    conn = http.client.HTTPConnection(node, port=node_dict[node])
                     conn.request('GET', '/die_notify/', headers={'host': self_ip, 'port': port})
                     conn.close()
                     print('clean die_notify to '+node)
@@ -217,6 +217,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
             else:
+                print ("got put")
                 value = body['value']
                 valid_string = self.validate_string(value)
                 if valid_string is not True:
@@ -265,7 +266,8 @@ class HandleRequests(BaseHTTPRequestHandler):
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
 
                 if method == 'put':
-                    # a broadcast of put?
+                    print ("broadcast put")
+                    # a broadcast of put
                     for node in node_dict.keys():
                         key_value = {"key": key, "value": value, "method": "put_server"}
                         url = "http://" + node + ":" + node_dict[node] + "/kv739/"
@@ -280,23 +282,6 @@ class HandleRequests(BaseHTTPRequestHandler):
                                 print ("Could not push to " + node)
                         except Exception as e:
                              print ("Put server error: {}".format(e))
-
-
-                # a broadcast of put?
-                # for node in node_dict:
-                #     key_value = json.dumps([value,millisec,key])
-                #     url = "http://" + node + "/peer_put"
-                #     try:
-                #         conn = http.client.HTTPConnection(node, port=node_dict(node))
-                #         conn.request('GET', '/peer_put', headers = {'host':self_ip , 'port':port })
-                #         conn.close()
-                #         x = requests.post(url, data = key_value)
-                #         if x.text == "OK":
-                #             print ("Successfully pushed to " + node)
-                #         else:
-                #             print ("Could not push to " + node)
-                #     except Exception as e:
-                #         print ("Put server error: {}".format(e))
 
             response = json.dumps(package)
             self.send_response(200)

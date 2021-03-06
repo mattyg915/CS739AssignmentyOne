@@ -93,11 +93,26 @@ int main(int argc, char** argv)
     //run tests
     //char* key = NULL;
     //char* val = NULL;
-    char value[2049];
-    printf("put\n");
-    kv739_put("key", "val", value);
+    char value0[2049];
+    char value1[2049];
+    char value2[2049];
     printf("get\n");
-    kv739_get("key", value);
+    kv739_get("key", value0);
+    printf("%s\n", value0);
+    printf("put\n");
+    kv739_put("key", "val", value1);
+    printf("%s\n", value1);
+    printf("get\n");
+    kv739_get("key", value2);
+    printf("%s\n", value2);
+    
+    printf("partition\n");
+    char* reachable[] = {server_names[0]};
+    kv739_partition(server_names[0], reachable);
+    
+    printf("die\n");
+    int die = kv739_die(server_names[0], 1);
+    printf("%d\n", die);
     //when a test returns, pause and rennovate severs if needed
     
     printf("shutdown\n");

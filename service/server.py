@@ -61,6 +61,7 @@ class HandleRequests(BaseHTTPRequestHandler):
     def do_GET(self):
         global KEEP_RUNNING
         global node_dict
+        #reflects initial list only
         global node_list
         global self_ip
         
@@ -84,6 +85,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             print(response)
         if route.path == '/die_clean/':
+            print("dying clean")
             response = "DYING"
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
@@ -91,11 +93,10 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             # notify all reachable hosts
-            port = node_dict[self_ip]
             for node in node_dict.keys():
                 try:
                     conn = http.client.HTTPConnection(node, port=node_dict(node))
-                    conn.request('GET', '/die_notify', headers={'host': self_ip, 'port': port})
+                    conn.request('GET', '/die_notify/', headers={'host': self_ip, 'port': port})
                     conn.close()
                     print('clean die_notify to '+node)
                 except Exception:
@@ -104,6 +105,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             exit()
         if route.path == '/die/':
             response = "DYING"
+            print("dying")
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.send_header("Content-Length", str(len(response)))
@@ -111,8 +113,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             
             KEEP_RUNNING = False
-            exit()
+            #shutdown()
         if route.path == '/die_notify/':
+            print("received die notify")
             host = self.headers.get('host')
             port = self.headers.get('port')
             # received a death notification, remove server from reachable
@@ -382,15 +385,22 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-        elif route.path == "/partition":
+        elif route.path == "/partition/":
+            print("partitioning")
+            print(body)
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
-            #global node_dict
+            global self_ip
+            global self_port
             if 'reachable' in body:
                 node_dict = dict()
                 for node in body['reachable']:
+                    if node == '':
+                        continue
                     ip, port = node.split(':')
-                    node_dict[ip] = port
+                    #don't add self
+                    if self_ip != ip or self_port != port:
+                        node_dict[ip] = port
             else:
                 print('error: reachable list not found')
         else:
@@ -412,12 +422,12 @@ def anti_entropy(cursor):
     
     global node_dict
     while success is not True and attempt_count < len(node_dict):
-        node = random.choice(list(node_dict.keys()))
-        attempt_count += 1
-        connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
-        connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
-        http_response = connection.getresponse()
         try:
+            node = random.choice(list(node_dict.keys()))
+            attempt_count += 1
+            connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
+            connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
+            http_response = connection.getresponse()
             if http_response.status == 200:
                 print('Executed anti entropy with node %s' % node)
             else:
@@ -445,15 +455,14 @@ def anti_entropy_wrapper():
         time.sleep(5)
         connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         cursor = connection.cursor()
-        while True:
-            time.sleep(ENTROPY_MAX)
-            anti_entropy(cursor)
+        
+        global KEEP_RUNNING
         try:  
             connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
             cursor = connection.cursor()
-            while True:
-                time.sleep(ENTROPY_MAX)
+            while KEEP_RUNNING:
                 anti_entropy(cursor)
+                time.sleep(ENTROPY_MAX)
         except Exception:
             print("error opening database connection")
         
@@ -473,6 +482,7 @@ class Server(ThreadingMixIn, HTTPServer):
         global dbPath
         global node_dict
         global self_ip
+        global self_port
         global node_list
         global entropy_counter
         global ENTROPY_MAX
@@ -486,7 +496,7 @@ class Server(ThreadingMixIn, HTTPServer):
         # record self ip and port
         node_address = node_list[int(node_index)].split(':')
         self_ip = node_address[0]
-        port = node_address[1]
+        self_port = node_address[1]
         for i in range(len(node_list)):
             parts = node_list[i].split(':')
             node_dict[parts[0]] = parts[1]
@@ -495,7 +505,7 @@ class Server(ThreadingMixIn, HTTPServer):
         # remove self from nodelist
         node_dict.pop(self_ip)
 
-        dbName = port + 'kv.db'
+        dbName = self_port + 'kv.db'
         dbPath = os.path.join(path, dbName)
 
         connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
@@ -506,13 +516,14 @@ class Server(ThreadingMixIn, HTTPServer):
         if cursor.fetchone()[0] == 0:
             cursor.execute('''CREATE TABLE 'records' (key text PRIMARY KEY, value text, time integer )''')
 
-        server = ThreadingHTTPServer((self_ip, int(port)), HandleRequests)
-        print('Server initializing, reachable at http://{}:{}'.format(self_ip, port))
+        server = ThreadingHTTPServer((self_ip, int(self_port)), HandleRequests)
+        print('Server initializing, reachable at http://{}:{}'.format(self_ip, self_port))
         
         entropy_counter = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
         
         #start auto anti entropy
-        threading.Thread(target=anti_entropy_wrapper).start()
+        t = threading.Thread(target=anti_entropy_wrapper)
+        t.start()
         #start server
         global KEEP_RUNNING
         try:
@@ -522,4 +533,5 @@ class Server(ThreadingMixIn, HTTPServer):
             pass
         finally:
             # Clean-up server (close socket, etc.)
+            t.join()
             server.server_close()

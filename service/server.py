@@ -102,7 +102,6 @@ class HandleRequests(BaseHTTPRequestHandler):
                 except Exception:
                     print('unable to die_notify node '+node)
             KEEP_RUNNING = False
-            exit()
         if route.path == '/die/':
             response = "DYING"
             print("dying")
@@ -113,7 +112,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             
             KEEP_RUNNING = False
-            #shutdown()
         if route.path == '/die_notify/':
             print("received die notify")
             host = self.headers.get('host')

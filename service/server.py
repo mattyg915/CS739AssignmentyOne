@@ -95,6 +95,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             # notify all reachable hosts
             for node in node_dict.keys():
                 try:
+                    #try only once
                     conn = http.client.HTTPConnection(node, port=node_dict(node))
                     conn.request('GET', '/die_notify/', headers={'host': self_ip, 'port': port})
                     conn.close()
@@ -303,20 +304,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-            
-            '''global entropy_counter
-            global entropy_lock
-            print('entro'+str(entropy_counter))
-            current = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-            print('curr'+str(current))
-            print(entropy_lock)
-            if (current - entropy_counter) > ENTROPY_MAX and not entropy_lock:
-                entropy_lock = True
-                # clear up entropy
-                print('executing anti entropy with entropy_counter=%d and current=%d' %(entropy_counter, current))
-                self.anti_entropy(cursor)
-                entropy_counter = current
-                entropy_lock = False'''
         elif route.path == "/peer_put":
             print('received peer_put...')
             # print(body)
@@ -408,7 +395,13 @@ class HandleRequests(BaseHTTPRequestHandler):
             else:
                 print('error: reachable list not found')
         else:
-            print("unknown route")
+            print("unknown route")                
+            response = "Bad request"
+            self.send_response(400)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
 
     # def broadcast(self):
     #    return

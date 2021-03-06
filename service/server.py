@@ -401,6 +401,12 @@ class HandleRequests(BaseHTTPRequestHandler):
                     #don't add self
                     if self_ip != ip or self_port != port:
                         node_dict[ip] = port
+                response = "OK"
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
             else:
                 print('error: reachable list not found')
         else:

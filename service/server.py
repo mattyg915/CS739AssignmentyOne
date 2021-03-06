@@ -61,6 +61,7 @@ class HandleRequests(BaseHTTPRequestHandler):
     def do_GET(self):
         global KEEP_RUNNING
         global node_dict
+        global node_list
         global self_ip
         
         route = urlparse(self.path)
@@ -72,9 +73,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
         if route.path == '/nodes/':
-            node_list = []
-            for node in node_dict.keys():
-                node_list.append(node+':'+node_dict[node])
+            #node_list = []
+            #for node in node_dict.keys():
+            #    node_list.append(node+':'+node_dict[node])
             response = json.dumps({"nodes": node_list})
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
@@ -122,6 +123,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 print('unexpected death notifcation from: host = %s, port = %s' % (host, port))
 
     def do_POST(self):
+        global node_dict
         try:
             connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         except Exception:
@@ -260,6 +262,24 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
 
+                if method == 'put':
+                    # a broadcast of put?
+                    for node in node_dict.keys():
+                        key_value = {"key": key, "value": value, "method": "put_server"}
+                        url = "http://" + node + ":" + node_dict[node] + "/kv739/"
+                        try:
+                            #conn = http.client.HTTPConnection(node, port=node_dict(node))
+                            #conn.request('GET', '/peer_put_update/', headers = {'host':self_ip , 'port':port })
+                            #conn.close()
+                            x = requests.post(url, json = key_value)
+                            if x.status_code == 200:
+                                print ("Successfully pushed to " + node)
+                            else:
+                                print ("Could not push to " + node)
+                        except Exception as e:
+                             print ("Put server error: {}".format(e))
+
+
                 # a broadcast of put?
                 # for node in node_dict:
                 #     key_value = json.dumps([value,millisec,key])
@@ -365,7 +385,7 @@ class HandleRequests(BaseHTTPRequestHandler):
         elif route.path == "/partition":
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
-            global node_dict
+            #global node_dict
             if 'reachable' in body:
                 node_dict = dict()
                 for node in body['reachable']:
@@ -453,6 +473,7 @@ class Server(ThreadingMixIn, HTTPServer):
         global dbPath
         global node_dict
         global self_ip
+        global node_list
         global entropy_counter
         global ENTROPY_MAX
 

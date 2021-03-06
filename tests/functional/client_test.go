@@ -18,7 +18,7 @@ var map_mutex sync.Mutex
 
 const server_path = "../../service/server.py"
 const database_path = "../../service/kv.db"
-const nodes_path = "../../service/nodes.txt"
+const nodes_path = "../../service/nodes_local.txt"
 
 func TestShutdown(t *testing.T) {
 	if Kv739_shutdown() == 0 {
@@ -187,7 +187,7 @@ func TestGetInputParams(t *testing.T) {
 		t.Errorf("Failed to insert val; val5 #5")
 	}
 
-	if e := Kv739_put("va12312p", "val2$123&\x123`", old_val); e != -1 {
+	if e := Kv739_put("va12312p", "val2$123&\x123`", old_val); e < 0 {
 		t.Errorf("Failed to insert val; val5 #5")
 	}
 

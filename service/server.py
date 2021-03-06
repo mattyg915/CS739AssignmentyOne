@@ -13,6 +13,7 @@ import random
 import json
 import sys
 import os
+import requests
 
 import sqlite3
 
@@ -96,7 +97,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             for node in node_dict.keys():
                 try:
                     #try only once
-                    conn = http.client.HTTPConnection(node, port=node_dict(node))
+                    conn = http.client.HTTPConnection(node, port=node_dict[node])
                     conn.request('GET', '/die_notify/', headers={'host': self_ip, 'port': port})
                     conn.close()
                     print('clean die_notify to '+node)

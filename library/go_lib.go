@@ -145,7 +145,7 @@ func kv739_partition(server *C.char, reachable **C.char) int32 {
 
 	var reachabl Reachable
 	reachabl.Server = srvr
-	reachabl.Reachable = reachable_list
+	reachabl.Reachable = reachable_list[:no_reachable]
 
 	reqJSON, _ := json.Marshal(reachabl)
 

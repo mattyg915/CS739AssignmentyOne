@@ -399,6 +399,12 @@ class HandleRequests(BaseHTTPRequestHandler):
                     #don't add self
                     if self_ip != ip or self_port != port:
                         node_dict[ip] = port
+                response = "OK"
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
             else:
                 print('error: reachable list not found')
         else:
@@ -427,15 +433,15 @@ def anti_entropy(cursor):
             connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json)})
             http_response = connection.getresponse()
             if http_response.status == 200:
-                print('Executed anti entropy with node %s' % node)
+                print('[AntiEntropy] Executed anti entropy with node %s' % node)
             else:
-                print('Error when executing anti entropy with node %s, response status %d' % (node, http_response.status))
+                print('[AntiEntropy] Error when executing anti entropy with node %s, response status %d' % (node, http_response.status))
             
             connection.close()
             success = True
         except Exception:
-            node_dict.pop(node)
-            print('unable to reach node %s, removed from reachable list... ' % node)
+            #node_dict.pop(node)
+            print('[AntiEntropy] Unable to reach node %s' % node)
             success = False
     # complex algo
     # select a random peer server and resolve all conflicts (1-way)

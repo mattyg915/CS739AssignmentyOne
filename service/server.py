@@ -17,6 +17,7 @@ import requests
 
 import sqlite3
 
+
 path = os.path.dirname(os.path.abspath(__file__))
 
 dbPath = ""
@@ -28,6 +29,8 @@ node_dict = dict()
 deadnode_dict = dict()
 self_ip = ''
 self_port = -1
+
+
 
 class HandleRequests(BaseHTTPRequestHandler):
     # disable logging
@@ -62,13 +65,13 @@ class HandleRequests(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
-        global KEEP_RUNNING
         global node_dict
         #reflects initial list only
         global node_list
         global self_ip
         global self_port
         global deadnode_dict
+        global server
         
         route = urlparse(self.path)
         if route.path == '/health/':
@@ -91,23 +94,31 @@ class HandleRequests(BaseHTTPRequestHandler):
             print(response)
         if route.path == '/die_clean/':
             print("dying clean")
+            #response = "DYING"
+            #self.send_response(200)
+            #self.send_header('Content-type', 'text/plain')
+            #self.send_header("Content-Length", str(len(response)))
+            #self.end_headers()
+            #self.wfile.write(response.encode())
+            # notify all reachable hosts
+            for node in node_dict.keys():
+                try:
+                    #try only once
+                    #conn = http.client.HTTPConnection(node, port=node_dict[node])
+                    r = requests.get('http://' + node + ":" + node_dict[node] + '/die_notify/', headers={'host': self_ip, 'port': self_port})
+                    if r.status_code == 200:
+                        print('clean die_notify to '+node)
+                except Exception:
+                    print('unable to die_notify node '+node)
             response = "DYING"
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-            # notify all reachable hosts
-            for node in node_dict.keys():
-                try:
-                    #try only once
-                    conn = http.client.HTTPConnection(node, port=node_dict[node])
-                    conn.request('GET', '/die_notify/', headers={'host': self_ip, 'port': self_port})
-                    conn.close()
-                    print('clean die_notify to '+node)
-                except Exception:
-                    print('unable to die_notify node '+node)
-            KEEP_RUNNING = False
+            
+            server.shutdown()
+            #threading.Thread(target = server.shutdown, daemon=True).start()
         if route.path == '/die/':
             response = "DYING"
             print("dying")
@@ -117,18 +128,27 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             
-            KEEP_RUNNING = False
+            #server.shutdown()
+            sys.exit()
+            #threading.Thread(target = server.shutdown, daemon=True).start()
         if route.path == '/die_notify/':
             print("received die notify")
             host = self.headers.get('host')
             port = self.headers.get('port')
             # received a death notification, remove server from reachable
-            if host in node_dict.keys():
-                port = node_dict.pop(host)
-                deadnode_dict[host] = port
-                print('successfully removed a server from reachable: host = %s, port = %s' % (host, port))
-            else:
-                print('unexpected death notifcation from: host = %s, port = %s' % (host, port))
+            #if host in node_dict.keys():
+            #    node_dict.pop(host)
+            #    deadnode_dict[host] = port
+            #    print('successfully removed a server from reachable: host = %s, port = %s' % (host, port))
+            #else:
+            #    print('unexpected death notifcation from: host = %s, port = %s' % (host, port))
+            response = "OK"
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+
 
     def do_POST(self):
         global node_dict
@@ -182,7 +202,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
             key = body['key']
             method = body['method']
-
+            print("request with method"+method)
             if method != 'get' and 'value' not in body:
                 package = {
                     "error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
@@ -327,19 +347,19 @@ class HandleRequests(BaseHTTPRequestHandler):
             ip = self.headers.get('host')
             port = self.headers.get('port')
             if ip not in node_dict:
-                if ip in deadnode_dict and port == deadnode_dict[ip]:
-                    print('Dead node %s at port %s has resurrected...' % (ip, port))
-                    deadnode_dict.pop(ip)
+                #if ip in deadnode_dict and port == deadnode_dict[ip]:
+                #print('Dead node %s at port %s has resurrected...' % (ip, port))
+                #deadnode_dict.pop(ip)
                     node_dict[ip] = port
-                else:
-                    print('Invalid node %s at port %s!' % (ip, port))
-                    response = "Frobidden"
-                    self.send_response(403)
-                    self.send_header('Content-type', 'text/plain')
-                    self.send_header("Content-Length", str(len(response)))
-                    self.end_headers()
-                    self.wfile.write(response.encode())
-                    return
+                #else:
+                #    print('Invalid node %s at port %s!' % (ip, port))
+                #    response = "Frobidden"
+                #    self.send_response(403)
+                #    self.send_header('Content-type', 'text/plain')
+                #    self.send_header("Content-Length", str(len(response)))
+                #    self.end_headers()
+                #    self.wfile.write(response.encode())
+                #    return
             
             
             for data in body:
@@ -407,7 +427,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
         elif route.path == "/partition/":
             print("partitioning")
-            print(body)
+            #print(body)
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
             if 'reachable' in body:
@@ -487,10 +507,14 @@ def anti_entropy_wrapper():
             connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
             cursor = connection.cursor()
             while KEEP_RUNNING:
-                anti_entropy(cursor)
                 time.sleep(ENTROPY_MAX)
+                if not KEEP_RUNNING:
+                    return
+                anti_entropy(cursor)
+            return
         except Exception:
             print("error opening database connection")
+        return
         
 
         
@@ -512,6 +536,7 @@ class Server(ThreadingMixIn, HTTPServer):
         global node_list
         global entropy_counter
         global ENTROPY_MAX
+        global server
 
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         if len(sys.argv) == 4:
@@ -548,13 +573,12 @@ class Server(ThreadingMixIn, HTTPServer):
         entropy_counter = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
         
         #start auto anti entropy
-        t = threading.Thread(target=anti_entropy_wrapper)
+        t = threading.Thread(target=anti_entropy_wrapper, daemon=True)
         t.start()
+        
         #start server
-        global KEEP_RUNNING
         try:
-            while KEEP_RUNNING:
-                server.handle_request()
+            server.serve_forever()
         except KeyboardInterrupt:
             pass
         finally:

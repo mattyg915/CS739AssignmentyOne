@@ -116,6 +116,8 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
+
+            KEEP_RUNNING = False
             server.shutdown()
         if route.path == '/die/':
             response = "DYING"
@@ -126,8 +128,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             
-            #server.shutdown()
-            sys.exit()
+            KEEP_RUNNING = False
+            server.shutdown()
+            
             #threading.Thread(target = server.shutdown, daemon=True).start()
         if route.path == '/die_notify/':
             print("received die notify")
@@ -147,6 +150,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
 
+            
 
     def do_POST(self):
         global node_dict

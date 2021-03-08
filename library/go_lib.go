@@ -92,7 +92,7 @@ func kv739_init(server_names **C.char) int32 {
 		//fmt.Printf("Element: %s\n", s)
 	}
 
-	fmt.Printf("The init servers %v\n", init_list)
+	//fmt.Printf("The init servers %v\n", init_list)
 	// Get the full node list from a seed node
 	foundAlive := false
 	var node_l NodeList
@@ -112,7 +112,7 @@ func kv739_init(server_names **C.char) int32 {
 
 	copy(node_list[:], node_l.NodeList[:])
 	node_no = len(node_l.NodeList)
-	fmt.Printf("[Init] Total number of nodes: %v\n", node_no)
+	//fmt.Printf("[Init] Total number of nodes: %v\n", node_no)
 	has_init = 1
 
 	return 0
@@ -188,7 +188,7 @@ func kv739_die(server *C.char, clean C.int) int32 {
 
 	req := fasthttp.AcquireRequest()
 	//req.SetBody()
-	fmt.Printf("[kv739_die] The die path: %v\n", kv739_die)
+	//fmt.Printf("[kv739_die] The die path: %v\n", kv739_die)
 	req.Header.SetMethodBytes(strGet)
 	req.Header.SetContentType("text/plain")
 	req.SetRequestURIBytes([]byte(die_path))
@@ -223,7 +223,7 @@ func getNodeList(server string) (NodeList, error) {
 	nodeList_path := "http://" + server + "/nodes/"
 	req := fasthttp.AcquireRequest()
 	//req.SetBody()
-	fmt.Printf("[getNodeList] The server path %v\n", nodeList_path)
+	//fmt.Printf("[getNodeList] The server path %v\n", nodeList_path)
 	req.Header.SetMethodBytes(strGet)
 	req.Header.SetContentType("text/plain")
 	req.SetRequestURIBytes([]byte(nodeList_path))
@@ -236,14 +236,14 @@ func getNodeList(server string) (NodeList, error) {
 	}
 
 	var nodeList NodeList
-	fmt.Printf("[getNodeList] The list body: %s\n", res.Body())
+	//fmt.Printf("[getNodeList] The list body: %s\n", res.Body())
 	err = json.Unmarshal(res.Body(), &nodeList)
 	if err != nil {
 		fmt.Println("[getNodeList] Error unmarshalling json")
 		return NodeList{}, err
 	}
 
-	fmt.Printf("The nodelist: %v\n", nodeList)
+	//fmt.Printf("The nodelist: %v\n", nodeList)
 
 	return nodeList, nil
 }
@@ -415,7 +415,7 @@ func do_kv739_get(key *C.char, value *C.char, server string) int32 {
 	s_path := "http://" + server + "/kv739/"
 
 	reqJSON, _ := json.Marshal(m)
-	fmt.Printf("[Get] The reqJSON: %v\n", string(reqJSON))
+	//fmt.Printf("[Get] The reqJSON: %v\n", string(reqJSON))
 
 	req := fasthttp.AcquireRequest()
 	req.SetBody(reqJSON)

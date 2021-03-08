@@ -91,22 +91,28 @@ class HandleRequests(BaseHTTPRequestHandler):
             print(response)
         if route.path == '/die_clean/':
             print("dying clean")
+            #response = "DYING"
+            #self.send_response(200)
+            #self.send_header('Content-type', 'text/plain')
+            #self.send_header("Content-Length", str(len(response)))
+            #self.end_headers()
+            #self.wfile.write(response.encode())
+            # notify all reachable hosts
+            for node in node_dict.keys():
+                try:
+                    #try only once
+                    #conn = http.client.HTTPConnection(node, port=node_dict[node])
+                    r = requests.get('http://' + node + ":" + node_dict[node] + '/die_notify/', headers={'host': self_ip, 'port': self_port})
+                    if r.status_code == 200:
+                        print('clean die_notify to '+node)
+                except Exception:
+                    print('unable to die_notify node '+node)
             response = "DYING"
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-            # notify all reachable hosts
-            for node in node_dict.keys():
-                try:
-                    #try only once
-                    conn = http.client.HTTPConnection(node, port=node_dict[node])
-                    conn.request('GET', '/die_notify/', headers={'host': self_ip, 'port': self_port})
-                    conn.close()
-                    print('clean die_notify to '+node)
-                except Exception:
-                    print('unable to die_notify node '+node)
             KEEP_RUNNING = False
         if route.path == '/die/':
             response = "DYING"
@@ -123,12 +129,19 @@ class HandleRequests(BaseHTTPRequestHandler):
             host = self.headers.get('host')
             port = self.headers.get('port')
             # received a death notification, remove server from reachable
-            if host in node_dict.keys():
-                port = node_dict.pop(host)
-                deadnode_dict[host] = port
-                print('successfully removed a server from reachable: host = %s, port = %s' % (host, port))
-            else:
-                print('unexpected death notifcation from: host = %s, port = %s' % (host, port))
+            #if host in node_dict.keys():
+            #    node_dict.pop(host)
+            #    deadnode_dict[host] = port
+            #    print('successfully removed a server from reachable: host = %s, port = %s' % (host, port))
+            #else:
+            #    print('unexpected death notifcation from: host = %s, port = %s' % (host, port))
+            response = "OK"
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response.encode())
+
 
     def do_POST(self):
         global node_dict
@@ -327,19 +340,19 @@ class HandleRequests(BaseHTTPRequestHandler):
             ip = self.headers.get('host')
             port = self.headers.get('port')
             if ip not in node_dict:
-                if ip in deadnode_dict and port == deadnode_dict[ip]:
-                    print('Dead node %s at port %s has resurrected...' % (ip, port))
-                    deadnode_dict.pop(ip)
+                #if ip in deadnode_dict and port == deadnode_dict[ip]:
+                #print('Dead node %s at port %s has resurrected...' % (ip, port))
+                #deadnode_dict.pop(ip)
                     node_dict[ip] = port
-                else:
-                    print('Invalid node %s at port %s!' % (ip, port))
-                    response = "Frobidden"
-                    self.send_response(403)
-                    self.send_header('Content-type', 'text/plain')
-                    self.send_header("Content-Length", str(len(response)))
-                    self.end_headers()
-                    self.wfile.write(response.encode())
-                    return
+                #else:
+                #    print('Invalid node %s at port %s!' % (ip, port))
+                #    response = "Frobidden"
+                #    self.send_response(403)
+                #    self.send_header('Content-type', 'text/plain')
+                #    self.send_header("Content-Length", str(len(response)))
+                #    self.end_headers()
+                #    self.wfile.write(response.encode())
+                #    return
             
             
             for data in body:
@@ -407,7 +420,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
         elif route.path == "/partition/":
             print("partitioning")
-            print(body)
+            #print(body)
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
             if 'reachable' in body:

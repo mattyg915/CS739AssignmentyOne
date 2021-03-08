@@ -116,9 +116,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-            
             server.shutdown()
-            #threading.Thread(target = server.shutdown, daemon=True).start()
         if route.path == '/die/':
             response = "DYING"
             print("dying")

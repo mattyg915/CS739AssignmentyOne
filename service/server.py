@@ -130,6 +130,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             
             KEEP_RUNNING = False
             server.shutdown()
+            sys.exit()
             
             #threading.Thread(target = server.shutdown, daemon=True).start()
         if route.path == '/die_notify/':
@@ -585,5 +586,5 @@ class Server(ThreadingMixIn, HTTPServer):
             pass
         finally:
             # Clean-up server (close socket, etc.)
-            t.join()
+            # t.join()
             server.server_close()

@@ -126,7 +126,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
             
-            #server.shutdown()
+            server.shutdown()
             sys.exit()
             #threading.Thread(target = server.shutdown, daemon=True).start()
         if route.path == '/die_notify/':

@@ -25,8 +25,8 @@ KEEP_RUNNING = True
 ENTROPY_MAX = 1  # in seconds
 # entropy_counter = None #last time anti_entroy was triggered in millisecs
 entropy_lock = False  # in case the previous anti entropy is unfinished, do not start the next yet
-node_dict = dict()
-deadnode_dict = dict()
+node_set = set()
+deadnode_set = set()
 self_ip = ''
 self_port = -1
 
@@ -65,12 +65,12 @@ class HandleRequests(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
-        global node_dict
+        global node_set
         #reflects initial list only
         global node_list
         global self_ip
         global self_port
-        global deadnode_dict
+        global deadnode_set
         global server
         
         route = urlparse(self.path)
@@ -101,11 +101,12 @@ class HandleRequests(BaseHTTPRequestHandler):
             #self.end_headers()
             #self.wfile.write(response.encode())
             # notify all reachable hosts
-            for node in node_dict.keys():
+            for node in node_set:
                 try:
                     #try only once
                     #conn = http.client.HTTPConnection(node, port=node_dict[node])
-                    r = requests.get('http://' + node + ":" + node_dict[node] + '/die_notify/', headers={'host': self_ip, 'port': self_port})
+                    #r = requests.get('http://' + node + ":" + node_dict[node] + '/die_notify/', headers={'host': self_ip, 'port': self_port})
+                    r = requests.get('http://' + node + '/die_notify/', headers={'host': self_ip, 'port': self_port})
                     if r.status_code == 200:
                         print('clean die_notify to '+node)
                 except Exception:
@@ -154,8 +155,8 @@ class HandleRequests(BaseHTTPRequestHandler):
             
 
     def do_POST(self):
-        global node_dict
-        global deadnode_dict
+        global node_set
+        global deadnode_set
         global self_ip
         global self_port
         try:
@@ -325,9 +326,9 @@ class HandleRequests(BaseHTTPRequestHandler):
                 if method == 'put':
                     print ("broadcast put")
                     # a broadcast of put
-                    for node in node_dict.keys():
+                    for node in node_set:
                         key_value = {"key": key, "value": value, "method": "put_server", 'host': self_ip, 'port': self_port}
-                        url = "http://" + node + ":" + node_dict[node] + "/kv739/"
+                        url = "http://" + node + "/kv739/"
                         try:
                             x = requests.post(url, json = key_value)
                             if x.status_code == 200:
@@ -349,11 +350,14 @@ class HandleRequests(BaseHTTPRequestHandler):
             #accept valide peer put only
             ip = self.headers.get('host')
             port = self.headers.get('port')
-            if ip not in node_dict:
+            node = ip + ":" + port
+
+            if node not in node_set and node in deadnode_set:
                 #if ip in deadnode_dict and port == deadnode_dict[ip]:
-                #print('Dead node %s at port %s has resurrected...' % (ip, port))
-                #deadnode_dict.pop(ip)
-                    node_dict[ip] = port
+                print('Dead node %s at port %s has resurrected...' % (ip, port))
+                node_set.add(node)
+                deadnode_set.remove(node)
+                #node_set.add(node)
                 #else:
                 #    print('Invalid node %s at port %s!' % (ip, port))
                 #    response = "Frobidden"
@@ -434,14 +438,15 @@ class HandleRequests(BaseHTTPRequestHandler):
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
             if 'reachable' in body:
-                node_dict = dict()
+                #node_dict = dict()
                 for node in body['reachable']:
                     if node == '':
                         continue
                     ip, port = node.split(':')
                     #don't add self
                     if ip != self_ip != ip or port != self_port:
-                        node_dict[ip] = port
+                        #node_dict[ip] = port
+                        node_set.add(node)
                 response = "OK"
                 self.send_response(200)
                 self.send_header('Content-type', 'text/plain')
@@ -469,12 +474,17 @@ def anti_entropy(cursor):
     success = False
     attempt_count = 0
     
-    global node_dict
+    global node_set
     while success is not True and attempt_count < len(node_dict):
+        
+        node = random.choice(list(node_set))
         try:
-            node = random.choice(list(node_dict.keys()))
+            parts = node.split(':')
+            ip = parts[0]
+            port = parts[1]
+
             attempt_count += 1
-            connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
+            connection = http.client.HTTPConnection(ip, port=int(port))
             connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json), 'host': self_ip, 'port': self_port})
             http_response = connection.getresponse()
             if http_response.status == 200:
@@ -533,7 +543,7 @@ def readNodes(nodes_file):
 class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
-        global node_dict
+        global node_set
         global self_ip
         global self_port
         global node_list
@@ -551,13 +561,14 @@ class Server(ThreadingMixIn, HTTPServer):
         node_address = node_list[int(node_index)].split(':')
         self_ip = node_address[0]
         self_port = node_address[1]
-        for i in range(len(node_list)):
-            parts = node_list[i].split(':')
-            node_dict[parts[0]] = parts[1]
-        print(node_dict)
+        for node in node_list:
+            node_set.add(node)
+            #parts = node_list[i].split(':')
+            #node_dict[parts[0]] = parts[1]
+        print(node_set)
         
         # remove self from nodelist
-        node_dict.pop(self_ip)
+        node_set.remove(node_list[int(node_index)])
 
         dbName = self_port + 'kv.db'
         dbPath = os.path.join(path, dbName)

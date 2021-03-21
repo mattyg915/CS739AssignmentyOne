@@ -22,7 +22,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 dbPath = ""
 KEEP_RUNNING = True
-ENTROPY_MAX = 60  # in seconds
+ENTROPY_MAX = 600  # in seconds
 entropy_lock = False  # in case the previous anti entropy is unfinished, do not start the next yet
 node_set = set()
 node_list = set()
@@ -172,7 +172,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             return
 
-        # direct write request
         if route.path == "/kv739/":
             if 'method' not in body or 'key' not in body:
                 package = {"error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
@@ -187,7 +186,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
             key = body['key']
             method = body['method']
-            print("request with method"+method)
+            print("request with method " + method)
             if method != 'get' and 'value' not in body:
                 package = {
                     "error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
@@ -270,16 +269,16 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     if method == 'put_server':
                         # do not accept server put from unreachable nodes
-                        ip = self.headers.get('host')
-                        port = self.headers.get('port')
-                        print('Invalid server put from node %s at port %d!' % (ip, port))
-                        response = "Forbidden"
-                        self.send_response(403)
-                        self.send_header('Content-type', 'text/plain')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
-                        return
+                        node = self.headers.get('host')
+                        if node not in node_set and node in deadnode_set:
+                            print('Invalid server put from node %s!' % (node))
+                            response = "Forbidden"
+                            self.send_response(403)
+                            self.send_header('Content-type', 'text/plain')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
+                            return
                 
                     try:
                         millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
@@ -306,10 +305,10 @@ class HandleRequests(BaseHTTPRequestHandler):
                     print("broadcast put")
                     # a broadcast of put
                     for node in node_set:
-                        key_value = {"key": key, "value": value, "method": "put_server", 'host': self_ip, 'port': self_port}
-                        url = "http://" + node + "/peer_put"
+                        key_value = {"key": key, "value": value, "method": "put_server"}
+                        url = "http://" + node + "/kv739/"
                         try:
-                            x = requests.post(url, json=key_value)
+                            x = requests.post(url, data=json.dumps(key_value))
                             if x.status_code == 200:
                                 print("Successfully pushed to " + node)
                             else:
@@ -323,7 +322,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-        elif route.path == "/peer_put":
+        elif route.path == "/peer_put/":
             print('received peer_put...')
             
             # accept valid peer put only
@@ -446,12 +445,12 @@ def anti_entropy(cursor):
 
             attempt_count += 1
             connection = http.client.HTTPConnection(ip, port=int(port))
-            connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json), 'host': self_ip, 'port': self_port})
+            connection.request('POST', '/peer_put/', alldata_json, {'Content-Length': len(alldata_json), 'host': self_ip, 'port': self_port})
             http_response = connection.getresponse()
             if http_response.status == 200:
-                print('[AntiEntropy] Executed anti entropy with node %s' % node)
+                print('Executed anti entropy with node %s' % node)
             else:
-                print('[AntiEntropy] Error when executing anti entropy with node %s, response status %d' % (node, http_response.status))
+                print('Error executing anti entropy with node %s, response status %d' % (node, http_response.status))
             
             connection.close()
             success = True

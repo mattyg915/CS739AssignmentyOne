@@ -113,7 +113,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             KEEP_RUNNING = False
             server.shutdown()
         if route.path == '/die/':
-            global KEEP_RUNNING
             response = "DYING"
             print("dying")
 

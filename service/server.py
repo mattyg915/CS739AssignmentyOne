@@ -22,8 +22,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 dbPath = ""
 KEEP_RUNNING = True
-ENTROPY_MAX = 1  # in seconds
-# entropy_counter = None #last time anti_entroy was triggered in millisecs
+ENTROPY_MAX = 60  # in seconds
 entropy_lock = False  # in case the previous anti entropy is unfinished, do not start the next yet
 node_set = set()
 node_list = set()
@@ -308,7 +307,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                     # a broadcast of put
                     for node in node_set:
                         key_value = {"key": key, "value": value, "method": "put_server", 'host': self_ip, 'port': self_port}
-                        url = "http://" + node + "/kv739/"
+                        url = "http://" + node + "/peer_put"
                         try:
                             x = requests.post(url, json=key_value)
                             if x.status_code == 200:
@@ -328,12 +327,10 @@ class HandleRequests(BaseHTTPRequestHandler):
             print('received peer_put...')
             
             # accept valid peer put only
-            ip = self.headers.get('host')
-            port = self.headers.get('port')
-            node = ip + ":" + port
+            node = self.headers.get('host')
 
             if node not in node_set and node in deadnode_set:
-                print('Dead node %s at port %s has resurrected...' % (ip, port))
+                print('Dead node %s at port %s has resurrected...' % (node))
                 node_set.add(node)
                 deadnode_set.remove(node)
 

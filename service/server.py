@@ -256,16 +256,16 @@ class HandleRequests(BaseHTTPRequestHandler):
                     except Exception as e:
                         print("Put server error: {}".format(e))
 
-                qurom_achieved = False
+                quorum_achieved = False
                 sorted_peer_results = sorted(peer_results, key=peer_results.get)
                 for temp_result in sorted_peer_results:
                     if peer_results[temp_result] >= quorum:
-                        qurom_achieved = True
+                        quorum_achieved = True
                         if temp_result == "None":
                             package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
                         else:
                             package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
-                if qurom_achieved is not True:
+                if quorum_achieved is not True:
                     package = {"error": "unable to achieve consensus"}
                     response = json.dumps(package)
                     self.send_response(500)

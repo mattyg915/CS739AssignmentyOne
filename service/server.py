@@ -271,8 +271,15 @@ class HandleRequests(BaseHTTPRequestHandler):
             elif method == 'delete':
                 print("execute delete")
                 cursor.execute('''DELETE FROM 'records' WHERE key = ?''', (key,))
-                connection.commit()
 
+                connection.commit()
+                package = {"key": key, "status": "deleted"}
+                response = json.dumps(package)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
             else:
                 value = body['value']
                 valid_string = self.validate_string(value)

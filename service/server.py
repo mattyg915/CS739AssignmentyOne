@@ -285,7 +285,8 @@ class HandleRequests(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(response.encode())
                     return
-                
+
+                new_millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
                 if result is not None:
                     # don't waste time updating value with same value
                     if result[0] != value:
@@ -356,12 +357,10 @@ class HandleRequests(BaseHTTPRequestHandler):
                             self.end_headers()
                             self.wfile.write(response.encode())
                             return
-                        millisec = int(body["millisec"])
-                    else :
-                        millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+                        new_millisec = int(body["millisec"])
 
                     try:
-                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, millisec))
+                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, new_millisec))
                         connection.commit()
                     except Exception as e:
                         message = "Internal server error: {}".format(e)
@@ -385,7 +384,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                     print("broadcast put new value")
 
                     for node in node_set:
-                        key_value = {"key": key, "value": value, "method": "put_server"}
+                        key_value = {"key": key, "value": value, "millisec": new_millisec, "method": "put_server"}
                         url = "http://" + node + "/kv739/"
                         try:
                             x = requests.post(url, data=json.dumps(key_value))

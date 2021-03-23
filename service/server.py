@@ -188,7 +188,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             key = body['key']
             method = body['method']
             print("request with method " + method)
-            if (method != 'get' and method != 'peer_get') and 'value' not in body:
+            if (method != 'get' and method != 'peer_get' and method != 'delete') and 'value' not in body:
                 package = {
                     "error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
                 response = json.dumps(package)
@@ -238,7 +238,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                     cur_value = None
                     cur_timestamp = 0
 
-                # broadcast get to other servers to achieve quorum
+                # broadcast get to other servers to make sure no value has a higher timestamp
                 for node in node_set:
                     get_package = {"key": key, "method": "peer_get"}
                     url = "http://" + node + "/kv739/"
@@ -268,6 +268,11 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
 
+            elif method == 'delete':
+                print("execute delete")
+                cursor.execute('''DELETE FROM 'records' WHERE key = ?''', (key,))
+                connection.commit()
+
             else:
                 value = body['value']
                 valid_string = self.validate_string(value)
@@ -285,9 +290,48 @@ class HandleRequests(BaseHTTPRequestHandler):
                     # don't waste time updating value with same value
                     if result[0] != value:
                         try:
+                            print("broadcast put update")
                             millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-                            cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''', (value, millisec, key))
-                            connection.commit()
+                            broadcast_successes = 0
+                            old_value = result[0]
+                            old_millisec = result[1]
+
+                            for node in node_set:
+                                key_value = {"key": key, "value": value, "millisec": millisec, "method": "put_server"}
+                                url = "http://" + node + "/kv739/"
+                                try:
+                                    x = requests.post(url, data=json.dumps(key_value))
+                                    if x.status_code == 200:
+                                        print("Successfully pushed update to " + node)
+                                        broadcast_successes += 1
+                                    else:
+                                        print("Could not push update to " + node)
+                                except Exception as e:
+                                    print("Put server error: {}".format(e))
+
+                            if broadcast_successes >= quorum:
+                                cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
+                                               (value, millisec, key))
+                                connection.commit()
+                            else:
+                                # undo commit
+                                cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
+                                               (old_value, old_millisec, key))
+                                # and broadcast the commit undo
+                                for node in node_set:
+                                    key_value = {"key": key, "value": old_value, "millisec": old_millisec,
+                                                 "method": "put_server"}
+                                    url = "http://" + node + "/kv739/"
+                                    try:
+                                        x = requests.post(url, data=json.dumps(key_value))
+                                        if x.status_code == 200:
+                                            print("Successfully pushed undo commit to " + node)
+                                            broadcast_successes += 1
+                                        else:
+                                            print("Could not push undo commit to " + node)
+                                    except Exception as e:
+                                        print("Put server error: {}".format(e))
+
                         except Exception as e:
                             message = "Internal server error: {}".format(e)
                             package = {"error": message}
@@ -312,9 +356,11 @@ class HandleRequests(BaseHTTPRequestHandler):
                             self.end_headers()
                             self.wfile.write(response.encode())
                             return
-                
-                    try:
+                        millisec = int(body["millisec"])
+                    else :
                         millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+
+                    try:
                         cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, millisec))
                         connection.commit()
                     except Exception as e:
@@ -334,9 +380,10 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
 
-                if method == 'put':
-                    print("broadcast put")
-                    # a broadcast of put
+                if method == 'put' and result is None:
+                    broadcast_successes = 0
+                    print("broadcast put new value")
+
                     for node in node_set:
                         key_value = {"key": key, "value": value, "method": "put_server"}
                         url = "http://" + node + "/kv739/"
@@ -344,10 +391,27 @@ class HandleRequests(BaseHTTPRequestHandler):
                             x = requests.post(url, data=json.dumps(key_value))
                             if x.status_code == 200:
                                 print("Successfully pushed to " + node)
+                                broadcast_successes += 1
                             else:
                                 print("Could not push to " + node)
                         except Exception as e:
                             print("Put server error: {}".format(e))
+
+                    if broadcast_successes < quorum:
+                        print("write quorum failed")
+                        cursor.execute('''DELETE FROM 'records' WHERE key = ?''', (key,))
+                        connection.commit()
+                        for node in node_set:
+                            key_value = {"key": key, "method": "delete"}
+                            url = "http://" + node + "/kv739/"
+                            try:
+                                x = requests.post(url, data=json.dumps(key_value))
+                                if x.status_code == 200:
+                                    print("Successfully pushed delete to " + node)
+                                else:
+                                    print("Could not push delete to " + node)
+                            except Exception as e:
+                                print("Put server error: {}".format(e))
 
             response = json.dumps(package)
             self.send_response(200)
@@ -374,7 +438,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 query = (key,)
                 
                 try:
-                    cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                    cursor.execute('''SELECT value, time FROM 'records' WHERE key=?''', query)
                     result = cursor.fetchone()
                 except Exception as e:
                     message = "Internal server error: {}".format(e)

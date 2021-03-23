@@ -215,7 +215,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             query = (key,)
 
             try:
-                cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                cursor.execute('''SELECT value, time FROM 'records' WHERE key=?''', query)
                 result = cursor.fetchone()
             except Exception as e:
                 message = "Internal server error: {}".format(e)
@@ -232,9 +232,11 @@ class HandleRequests(BaseHTTPRequestHandler):
             if method == 'get':
                 peer_results = dict()
                 if result is not None:
-                    peer_results[result[0]] = 1
+                    cur_value = result[0]
+                    cur_timestamp = int(result[1])
                 else:
-                    peer_results["None"] = 1
+                    cur_value = None
+                    cur_timestamp = 0
 
                 # broadcast get to other servers to achieve quorum
                 for node in node_set:
@@ -245,39 +247,24 @@ class HandleRequests(BaseHTTPRequestHandler):
                         if res.status_code == 200:
                             result_body = res.json()
                             peer_result = result_body["former_value"]
-                            if peer_result == "[]":
-                                peer_result = "None"
-                            if peer_result in peer_results:
-                                peer_results[peer_result] = peer_results[peer_result] + 1
-                            else:
-                                peer_results[peer_result] = 1
+                            peer_timestamp = result_body["timestamp"]
+                            if int(peer_timestamp) > cur_timestamp:
+                                if peer_result == "[]":
+                                    cur_value = None
+                                    cur_timestamp = peer_timestamp
                         else:
                             print("Could not access " + node)
                     except Exception as e:
                         print("Put server error: {}".format(e))
 
-                quorum_achieved = False
-                sorted_peer_results = sorted(peer_results, key=peer_results.get)
-                for temp_result in sorted_peer_results:
-                    if peer_results[temp_result] >= quorum:
-                        quorum_achieved = True
-                        if temp_result == "None":
-                            package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
-                        else:
-                            package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
-                if quorum_achieved is not True:
-                    package = {"error": "unable to achieve consensus"}
-                    response = json.dumps(package)
-                    self.send_response(500)
-                    self.send_header('Content-type', 'application/json')
-                    self.send_header("Content-Length", str(len(response)))
-                    self.end_headers()
-                    self.wfile.write(response.encode())
-                    return
+                if cur_value is None:
+                    package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
+                else:
+                    package = {"exists": "yes", "former_value": cur_value, "new_value": "[]"}
 
             elif method == 'peer_get':
                 if result is not None:
-                    package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
+                    package = {"exists": "yes", "former_value": result[0], "timestamp": result[1], "new_value": "[]"}
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
 

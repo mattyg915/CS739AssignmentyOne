@@ -22,7 +22,7 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 dbPath = ""
 KEEP_RUNNING = True
-ENTROPY_MAX = 600  # in seconds
+ENTROPY_MAX = 60  # in seconds
 entropy_lock = False  # in case the previous anti entropy is unfinished, do not start the next yet
 node_set = set()
 node_list = set()
@@ -30,6 +30,7 @@ deadnode_set = set()
 self_ip = ''
 self_port = -1
 entropy_counter = 0
+quorum = 0
 
 
 class HandleRequests(BaseHTTPRequestHandler):
@@ -187,7 +188,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             key = body['key']
             method = body['method']
             print("request with method " + method)
-            if method != 'get' and 'value' not in body:
+            if (method != 'get' and method != 'peer_get') and 'value' not in body:
                 package = {
                     "error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
                 response = json.dumps(package)
@@ -229,16 +230,61 @@ class HandleRequests(BaseHTTPRequestHandler):
                 return
 
             if method == 'get':
+                peer_results = dict()
+                if result is not None:
+                    peer_results[result[0]] = 1
+                else:
+                    peer_results["None"] = 1
+
+                # broadcast get to other servers to achieve quorum
+                for node in node_set:
+                    get_package = {"key": key, "method": "peer_get"}
+                    url = "http://" + node + "/kv739/"
+                    try:
+                        res = requests.post(url, data=json.dumps(get_package))
+                        if res.status_code == 200:
+                            result_body = res.json()
+                            peer_result = result_body["former_value"]
+                            if peer_result == "[]":
+                                peer_result = "None"
+                            if peer_result in peer_results:
+                                peer_results[peer_result] = peer_results[peer_result] + 1
+                            else:
+                                peer_results[peer_result] = 1
+                        else:
+                            print("Could not access " + node)
+                    except Exception as e:
+                        print("Put server error: {}".format(e))
+
+                qurom_achieved = False
+                sorted_peer_results = sorted(peer_results, key=peer_results.get)
+                for temp_result in sorted_peer_results:
+                    if peer_results[temp_result] >= quorum:
+                        qurom_achieved = True
+                        if temp_result == "None":
+                            package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
+                        else:
+                            package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
+                if qurom_achieved is not True:
+                    package = {"error": "unable to achieve consensus"}
+                    response = json.dumps(package)
+                    self.send_response(500)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header("Content-Length", str(len(response)))
+                    self.end_headers()
+                    self.wfile.write(response.encode())
+                    return
+
+            elif method == 'peer_get':
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
-
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
+
             else:
                 value = body['value']
                 valid_string = self.validate_string(value)
                 if valid_string is not True:
-                    
                     package = {"error": "invalid value"}
                     response = json.dumps(package)
                     self.send_response(400)
@@ -271,7 +317,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                         # do not accept server put from unreachable nodes
                         node = self.headers.get('host')
                         if node not in node_set and node in deadnode_set:
-                            print('Invalid server put from node %s!' % (node))
+                            print('Invalid server put from node %s!' % node)
                             response = "Forbidden"
                             self.send_response(403)
                             self.send_header('Content-type', 'text/plain')
@@ -329,7 +375,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             node = self.headers.get('host')
 
             if node not in node_set and node in deadnode_set:
-                print('Dead node %s at port %s has resurrected...' % (node))
+                print('Dead node %s at port %s has resurrected...' % node)
                 node_set.add(node)
                 deadnode_set.remove(node)
 
@@ -497,6 +543,7 @@ class Server(ThreadingMixIn, HTTPServer):
         global entropy_counter
         global ENTROPY_MAX
         global server
+        global quorum
 
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         if len(sys.argv) == 4:
@@ -511,7 +558,10 @@ class Server(ThreadingMixIn, HTTPServer):
         for node in node_list:
             node_set.add(node)
         print(node_set)
-        
+
+        # set quorum value
+        quorum = (len(node_set) // 2) + 1
+
         # remove self from nodelist
         node_set.remove(node_list[int(node_index)])
 

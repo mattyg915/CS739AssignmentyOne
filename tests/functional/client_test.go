@@ -134,7 +134,7 @@ func TestGetInputParams(t *testing.T) {
 		panic(err)
 	}
 
-	if e := Kv739_init([]string{"127.0.0.1:5000"}); e != 0 {
+	if e := Kv739_init([]string{"localhost:5000"}); e != 0 {
 		panic("failed to init server")
 	}
 

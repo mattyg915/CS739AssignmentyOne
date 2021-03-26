@@ -22,14 +22,15 @@ path = os.path.dirname(os.path.abspath(__file__))
 
 dbPath = ""
 KEEP_RUNNING = True
-ENTROPY_MAX = 1  # in seconds
-# entropy_counter = None #last time anti_entroy was triggered in millisecs
+ENTROPY_MAX = 60  # in seconds
 entropy_lock = False  # in case the previous anti entropy is unfinished, do not start the next yet
-node_dict = dict()
-deadnode_dict = dict()
+node_set = set()
+node_list = set()
+deadnode_set = set()
 self_ip = ''
 self_port = -1
-
+entropy_counter = 0
+quorum = 0
 
 
 class HandleRequests(BaseHTTPRequestHandler):
@@ -65,12 +66,14 @@ class HandleRequests(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self):
-        global node_dict
-        #reflects initial list only
+        global node_set
+
+        # reflects initial list only
         global node_list
+
         global self_ip
         global self_port
-        global deadnode_dict
+        global deadnode_set
         global server
         
         route = urlparse(self.path)
@@ -82,9 +85,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
         if route.path == '/nodes/':
-            #node_list = []
-            #for node in node_dict.keys():
-            #    node_list.append(node+':'+node_dict[node])
             response = json.dumps({"nodes": node_list})
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
@@ -94,22 +94,15 @@ class HandleRequests(BaseHTTPRequestHandler):
             print(response)
         if route.path == '/die_clean/':
             print("dying clean")
-            #response = "DYING"
-            #self.send_response(200)
-            #self.send_header('Content-type', 'text/plain')
-            #self.send_header("Content-Length", str(len(response)))
-            #self.end_headers()
-            #self.wfile.write(response.encode())
-            # notify all reachable hosts
-            for node in node_dict.keys():
+            global KEEP_RUNNING
+
+            for node in node_set:
                 try:
-                    #try only once
-                    #conn = http.client.HTTPConnection(node, port=node_dict[node])
-                    r = requests.get('http://' + node + ":" + node_dict[node] + '/die_notify/', headers={'host': self_ip, 'port': self_port})
+                    r = requests.get('http://' + node + '/die_notify/', headers={'host': self_ip, 'port': self_port})
                     if r.status_code == 200:
                         print('clean die_notify to '+node)
-                except Exception:
-                    print('unable to die_notify node '+node)
+                except Exception as e:
+                    print('unable to die_notify node ' + node + ' error: '.format(e))
             response = "DYING"
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
@@ -122,6 +115,7 @@ class HandleRequests(BaseHTTPRequestHandler):
         if route.path == '/die/':
             response = "DYING"
             print("dying")
+
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.send_header("Content-Length", str(len(response)))
@@ -132,18 +126,9 @@ class HandleRequests(BaseHTTPRequestHandler):
             server.shutdown()
             sys.exit()
             
-            #threading.Thread(target = server.shutdown, daemon=True).start()
         if route.path == '/die_notify/':
             print("received die notify")
-            host = self.headers.get('host')
-            port = self.headers.get('port')
-            # received a death notification, remove server from reachable
-            #if host in node_dict.keys():
-            #    node_dict.pop(host)
-            #    deadnode_dict[host] = port
-            #    print('successfully removed a server from reachable: host = %s, port = %s' % (host, port))
-            #else:
-            #    print('unexpected death notifcation from: host = %s, port = %s' % (host, port))
+
             response = "OK"
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
@@ -151,17 +136,15 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
 
-            
-
     def do_POST(self):
-        global node_dict
-        global deadnode_dict
+        global node_set
+        global deadnode_set
         global self_ip
         global self_port
         try:
             connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
-        except Exception:
-            package = {"error": "error opening database connection"}
+        except Exception as e:
+            package = {"error": "error opening database connection: ".format(e)}
             response = json.dumps(package)
 
             self.send_response(500)
@@ -190,7 +173,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
             return
 
-        # direct write request
         if route.path == "/kv739/":
             if 'method' not in body or 'key' not in body:
                 package = {"error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
@@ -205,8 +187,8 @@ class HandleRequests(BaseHTTPRequestHandler):
 
             key = body['key']
             method = body['method']
-            print("request with method"+method)
-            if method != 'get' and 'value' not in body:
+            print("request with method " + method)
+            if (method != 'get' and method != 'peer_get' and method != 'delete') and 'value' not in body:
                 package = {
                     "error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
                 response = json.dumps(package)
@@ -233,7 +215,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             query = (key,)
 
             try:
-                cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                cursor.execute('''SELECT value, time FROM 'records' WHERE key=?''', query)
                 result = cursor.fetchone()
             except Exception as e:
                 message = "Internal server error: {}".format(e)
@@ -247,19 +229,61 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.wfile.write(response.encode())
                 return
 
-            # cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
-            # result = cursor.fetchone()
             if method == 'get':
+                peer_results = dict()
                 if result is not None:
-                    package = {"exists": "yes", "former_value": result[0], "new_value": "[]"}
+                    cur_value = result[0]
+                    cur_timestamp = int(result[1])
+                else:
+                    cur_value = None
+                    cur_timestamp = 0
 
+                # broadcast get to other servers to make sure no value has a higher timestamp
+                for node in node_set:
+                    get_package = {"key": key, "method": "peer_get"}
+                    url = "http://" + node + "/kv739/"
+                    try:
+                        res = requests.post(url, data=json.dumps(get_package))
+                        if res.status_code == 200:
+                            result_body = res.json()
+                            peer_result = result_body["former_value"]
+                            peer_timestamp = result_body["timestamp"]
+                            if int(peer_timestamp) > cur_timestamp:
+                                if peer_result == "[]":
+                                    cur_value = None
+                                    cur_timestamp = peer_timestamp
+                        else:
+                            print("Could not access " + node)
+                    except Exception as e:
+                        print("Put server error: {}".format(e))
+
+                if cur_value is None:
+                    package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
+                else:
+                    package = {"exists": "yes", "former_value": cur_value, "new_value": "[]"}
+
+            elif method == 'peer_get':
+                if result is not None:
+                    package = {"exists": "yes", "former_value": result[0], "timestamp": result[1], "new_value": "[]"}
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
+
+            elif method == 'delete':
+                print("execute delete")
+                cursor.execute('''DELETE FROM 'records' WHERE key = ?''', (key,))
+
+                connection.commit()
+                package = {"key": key, "status": "deleted"}
+                response = json.dumps(package)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
             else:
                 value = body['value']
                 valid_string = self.validate_string(value)
                 if valid_string is not True:
-                    
                     package = {"error": "invalid value"}
                     response = json.dumps(package)
                     self.send_response(400)
@@ -268,16 +292,54 @@ class HandleRequests(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(response.encode())
                     return
-                
+
+                new_millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
                 if result is not None:
                     # don't waste time updating value with same value
                     if result[0] != value:
                         try:
+                            print("broadcast put update")
                             millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-                            cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''', (value, millisec, key))
-                            connection.commit()
-                            # # update the cache
-                            # cache[key] = value
+                            broadcast_successes = 0
+                            old_value = result[0]
+                            old_millisec = result[1]
+
+                            for node in node_set:
+                                key_value = {"key": key, "value": value, "millisec": millisec, "method": "put_server"}
+                                url = "http://" + node + "/kv739/"
+                                try:
+                                    x = requests.post(url, data=json.dumps(key_value))
+                                    if x.status_code == 200:
+                                        print("Successfully pushed update to " + node)
+                                        broadcast_successes += 1
+                                    else:
+                                        print("Could not push update to " + node)
+                                except Exception as e:
+                                    print("Put server error: {}".format(e))
+
+                            if broadcast_successes >= quorum:
+                                cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
+                                               (value, millisec, key))
+                                connection.commit()
+                            else:
+                                # undo commit
+                                cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
+                                               (old_value, old_millisec, key))
+                                # and broadcast the commit undo
+                                for node in node_set:
+                                    key_value = {"key": key, "value": old_value, "millisec": old_millisec,
+                                                 "method": "put_server"}
+                                    url = "http://" + node + "/kv739/"
+                                    try:
+                                        x = requests.post(url, data=json.dumps(key_value))
+                                        if x.status_code == 200:
+                                            print("Successfully pushed undo commit to " + node)
+                                            broadcast_successes += 1
+                                        else:
+                                            print("Could not push undo commit to " + node)
+                                    except Exception as e:
+                                        print("Put server error: {}".format(e))
+
                         except Exception as e:
                             message = "Internal server error: {}".format(e)
                             package = {"error": message}
@@ -291,19 +353,21 @@ class HandleRequests(BaseHTTPRequestHandler):
                             return
                 else:
                     if method == 'put_server':
-                        #do not accept server put from unreachable nodes
-                        print('Invalid server put from node %s at port %d!' % (ip, port))
-                        response = "Frobidden"
-                        self.send_response(403)
-                        self.send_header('Content-type', 'text/plain')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
-                        return
-                
+                        # do not accept server put from unreachable nodes
+                        node = self.headers.get('host')
+                        if node not in node_set and node in deadnode_set:
+                            print('Invalid server put from node %s!' % node)
+                            response = "Forbidden"
+                            self.send_response(403)
+                            self.send_header('Content-type', 'text/plain')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
+                            return
+                        new_millisec = int(body["millisec"])
+
                     try:
-                        millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, millisec))
+                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, new_millisec))
                         connection.commit()
                     except Exception as e:
                         message = "Internal server error: {}".format(e)
@@ -322,20 +386,38 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": value}
 
-                if method == 'put':
-                    print ("broadcast put")
-                    # a broadcast of put
-                    for node in node_dict.keys():
-                        key_value = {"key": key, "value": value, "method": "put_server", 'host': self_ip, 'port': self_port}
-                        url = "http://" + node + ":" + node_dict[node] + "/kv739/"
+                if method == 'put' and result is None:
+                    broadcast_successes = 0
+                    print("broadcast put new value")
+
+                    for node in node_set:
+                        key_value = {"key": key, "value": value, "millisec": new_millisec, "method": "put_server"}
+                        url = "http://" + node + "/kv739/"
                         try:
-                            x = requests.post(url, json = key_value)
+                            x = requests.post(url, data=json.dumps(key_value))
                             if x.status_code == 200:
-                                print ("Successfully pushed to " + node)
+                                print("Successfully pushed to " + node)
+                                broadcast_successes += 1
                             else:
-                                print ("Could not push to " + node)
+                                print("Could not push to " + node)
                         except Exception as e:
-                             print ("Put server error: {}".format(e))
+                            print("Put server error: {}".format(e))
+
+                    if broadcast_successes < quorum:
+                        print("write quorum failed")
+                        cursor.execute('''DELETE FROM 'records' WHERE key = ?''', (key,))
+                        connection.commit()
+                        for node in node_set:
+                            key_value = {"key": key, "method": "delete"}
+                            url = "http://" + node + "/kv739/"
+                            try:
+                                x = requests.post(url, data=json.dumps(key_value))
+                                if x.status_code == 200:
+                                    print("Successfully pushed delete to " + node)
+                                else:
+                                    print("Could not push delete to " + node)
+                            except Exception as e:
+                                print("Put server error: {}".format(e))
 
             response = json.dumps(package)
             self.send_response(200)
@@ -343,39 +425,26 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-        elif route.path == "/peer_put":
+        elif route.path == "/peer_put/":
             print('received peer_put...')
             
-            #accept valide peer put only
-            ip = self.headers.get('host')
-            port = self.headers.get('port')
-            if ip not in node_dict:
-                #if ip in deadnode_dict and port == deadnode_dict[ip]:
-                #print('Dead node %s at port %s has resurrected...' % (ip, port))
-                #deadnode_dict.pop(ip)
-                    node_dict[ip] = port
-                #else:
-                #    print('Invalid node %s at port %s!' % (ip, port))
-                #    response = "Frobidden"
-                #    self.send_response(403)
-                #    self.send_header('Content-type', 'text/plain')
-                #    self.send_header("Content-Length", str(len(response)))
-                #    self.end_headers()
-                #    self.wfile.write(response.encode())
-                #    return
-            
-            
+            # accept valid peer put only
+            node = self.headers.get('host')
+
+            if node not in node_set and node in deadnode_set:
+                print('Dead node %s at port %s has resurrected...' % node)
+                node_set.add(node)
+                deadnode_set.remove(node)
+
             for data in body:
                 # put each data entry into the local db
-                # print('data:'+str(data))
                 key, value, millisec = data
-                # print([key,value,millisec])
-                
+
                 # don't meed to validate strings here, this has been done already
                 query = (key,)
                 
                 try:
-                    cursor.execute('''SELECT value FROM 'records' WHERE key=?''', query)
+                    cursor.execute('''SELECT value, time FROM 'records' WHERE key=?''', query)
                     result = cursor.fetchone()
                 except Exception as e:
                     message = "Internal server error: {}".format(e)
@@ -407,20 +476,20 @@ class HandleRequests(BaseHTTPRequestHandler):
                             self.wfile.write(response.encode())
                             return
                 else:
-                        try:
-                            cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, millisec))
-                            connection.commit()
-                        except Exception as e:
-                            message = "Internal server error: {}".format(e)
-                            package = {"error": message}
-                            response = json.dumps(package)
+                    try:
+                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, millisec))
+                        connection.commit()
+                    except Exception as e:
+                        message = "Internal server error: {}".format(e)
+                        package = {"error": message}
+                        response = json.dumps(package)
 
-                            self.send_response(500)
-                            self.send_header('Content-type', 'application/json')
-                            self.send_header("Content-Length", str(len(response)))
-                            self.end_headers()
-                            self.wfile.write(response.encode())
-                            return
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+                        return
                             
             response = "OK"
             self.send_response(200)
@@ -430,18 +499,17 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.wfile.write(response.encode())
         elif route.path == "/partition/":
             print("partitioning")
-            #print(body)
             # body should contain a dict of reachable nodes
             # i.e. ['snare-01':'5000', 'royal-01':'5000']
             if 'reachable' in body:
-                node_dict = dict()
                 for node in body['reachable']:
                     if node == '':
                         continue
                     ip, port = node.split(':')
-                    #don't add self
+                    # don't add self
                     if ip != self_ip != ip or port != self_port:
-                        node_dict[ip] = port
+                        node_set.add(node)
+
                 response = "OK"
                 self.send_response(200)
                 self.send_header('Content-type', 'text/plain')
@@ -469,77 +537,70 @@ def anti_entropy(cursor):
     success = False
     attempt_count = 0
     
-    global node_dict
-    while success is not True and attempt_count < len(node_dict):
+    global node_set
+    while success is not True and attempt_count < len(node_set):
+        
+        node = random.choice(list(node_set))
         try:
-            node = random.choice(list(node_dict.keys()))
+            parts = node.split(':')
+            ip = parts[0]
+            port = parts[1]
+
             attempt_count += 1
-            connection = http.client.HTTPConnection(node, port=int(node_dict[node]))
-            connection.request('POST', '/peer_put', alldata_json, {'Content-Length': len(alldata_json), 'host': self_ip, 'port': self_port})
+            connection = http.client.HTTPConnection(ip, port=int(port))
+            connection.request('POST', '/peer_put/', alldata_json, {'Content-Length': len(alldata_json), 'host': self_ip, 'port': self_port})
             http_response = connection.getresponse()
             if http_response.status == 200:
-                print('[AntiEntropy] Executed anti entropy with node %s' % node)
+                print('Executed anti entropy with node %s' % node)
             else:
-                print('[AntiEntropy] Error when executing anti entropy with node %s, response status %d' % (node, http_response.status))
+                print('Error executing anti entropy with node %s, response status %d' % (node, http_response.status))
             
             connection.close()
             success = True
-        except Exception:
-            #node_dict.pop(node)
-            print('[AntiEntropy] Unable to reach node %s' % node)
+        except Exception as e:
+            print('[AntiEntropy] Unable to reach node %s: {}'.format(e) % node)
             success = False
-    # complex algo
-    # select a random peer server and resolve all conflicts (1-way)
-    # assume timestamp sorted DB    
-    # share a hash to the entire db to the peer
-    # if hashes do not agree:
-    # share the latest ENTROPY_MAX records as a temporary .db
-    # check complete hash again
-    # if hashes still do not agree:
-    # share the entire DB
     return
 
+
 def anti_entropy_wrapper():
-        #give some time to start peer servers
-        time.sleep(5)
+    # give some time to start peer servers
+    time.sleep(5)
+
+    global KEEP_RUNNING
+    try:
         connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         cursor = connection.cursor()
-        
-        global KEEP_RUNNING
-        try:  
-            connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
-            cursor = connection.cursor()
-            while KEEP_RUNNING:
-                time.sleep(ENTROPY_MAX)
-                if not KEEP_RUNNING:
-                    return
-                anti_entropy(cursor)
-            return
-        except Exception:
-            print("error opening database connection")
+        while KEEP_RUNNING:
+            time.sleep(ENTROPY_MAX)
+            if not KEEP_RUNNING:
+                return
+            anti_entropy(cursor)
         return
-        
-
+    except Exception as e:
+        print("error opening database connection: {}".format(e))
+    return
         
 
 def readNodes(nodes_file):
-    f = open(nodes_file, "r")
-    l = []
-    for line in f.readlines():
-        l += [line.strip(' ').strip('\n')]
-    return l
+    file = open(nodes_file, "r")
+    temp_list = []
+    for line in file.readlines():
+        temp_list += [line.strip(' ').strip('\n')]
+    return temp_list
 
 
 class Server(ThreadingMixIn, HTTPServer):
     if __name__ == '__main__':
         global dbPath
-        global node_dict
+        global node_set
         global self_ip
         global self_port
         global node_list
         global entropy_counter
         global ENTROPY_MAX
         global server
+        global quorum
 
         nodes_file, node_index = sys.argv[1], sys.argv[2]
         if len(sys.argv) == 4:
@@ -551,13 +612,15 @@ class Server(ThreadingMixIn, HTTPServer):
         node_address = node_list[int(node_index)].split(':')
         self_ip = node_address[0]
         self_port = node_address[1]
-        for i in range(len(node_list)):
-            parts = node_list[i].split(':')
-            node_dict[parts[0]] = parts[1]
-        print(node_dict)
-        
+        for node in node_list:
+            node_set.add(node)
+        print(node_set)
+
+        # set quorum value
+        quorum = (len(node_set) // 2) + 1
+
         # remove self from nodelist
-        node_dict.pop(self_ip)
+        node_set.remove(node_list[int(node_index)])
 
         dbName = self_port + 'kv.db'
         dbPath = os.path.join(path, dbName)
@@ -575,11 +638,11 @@ class Server(ThreadingMixIn, HTTPServer):
         
         entropy_counter = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
         
-        #start auto anti entropy
+        # start auto anti entropy
         t = threading.Thread(target=anti_entropy_wrapper, daemon=True)
         t.start()
         
-        #start server
+        # start server
         try:
             server.serve_forever()
         except KeyboardInterrupt:

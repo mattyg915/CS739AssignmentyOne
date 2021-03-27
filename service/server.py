@@ -90,6 +90,7 @@ class HandleRequests(BaseHTTPRequestHandler):
         # elect and broadcast new leader
         global node_leader_index
         global node_leader
+        global KEEP_RUNNING
 
         # first make sure a quorum is still possible
         healthy_list = self.check_cluster_health()
@@ -102,7 +103,6 @@ class HandleRequests(BaseHTTPRequestHandler):
                     requests.get(url, data=json.dumps(package))
                 except Exception as e:
                     print("Error killing: {}".format(e))
-            global KEEP_RUNNING
             KEEP_RUNNING = False
             server.shutdown()
 
@@ -146,7 +146,6 @@ class HandleRequests(BaseHTTPRequestHandler):
                     requests.get(url, data=json.dumps(package))
                 except Exception as e:
                     print("Error killing: {}".format(e))
-            global KEEP_RUNNING
             KEEP_RUNNING = False
             server.shutdown()
 
@@ -416,62 +415,60 @@ class HandleRequests(BaseHTTPRequestHandler):
 
                 new_millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
                 if result is not None:
-                    # don't waste time updating value with same value
-                    if result[0] != value:
-                        try:
-                            print("broadcast put update")
-                            millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-                            broadcast_successes = 0
-                            old_value = result[0]
-                            old_millisec = result[1]
+                    try:
+                        print("broadcast put update")
+                        millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+                        broadcast_successes = 0
+                        old_value = result[0]
+                        old_millisec = result[1]
 
+                        for node in node_set:
+                            key_value = {"key": key, "value": value, "millisec": millisec, "method": "put_server"}
+                            url = "http://" + node + "/kv739/"
+                            try:
+                                x = requests.post(url, data=json.dumps(key_value))
+                                if x.status_code == 200:
+                                    print("Successfully pushed update to " + node)
+                                    broadcast_successes += 1
+                                else:
+                                    print("Could not push update to " + node)
+                            except Exception as e:
+                                print("Put server error: {}".format(e))
+
+                        if broadcast_successes >= quorum:
+                            cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
+                                           (value, millisec, key))
+                            connection.commit()
+                        else:
+                            # undo commit
+                            cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
+                                           (old_value, old_millisec, key))
+                            # and broadcast the commit undo
                             for node in node_set:
-                                key_value = {"key": key, "value": value, "millisec": millisec, "method": "put_server"}
+                                key_value = {"key": key, "value": old_value, "millisec": old_millisec,
+                                             "method": "put_server"}
                                 url = "http://" + node + "/kv739/"
                                 try:
                                     x = requests.post(url, data=json.dumps(key_value))
                                     if x.status_code == 200:
-                                        print("Successfully pushed update to " + node)
+                                        print("Successfully pushed undo commit to " + node)
                                         broadcast_successes += 1
                                     else:
-                                        print("Could not push update to " + node)
+                                        print("Could not push undo commit to " + node)
                                 except Exception as e:
                                     print("Put server error: {}".format(e))
 
-                            if broadcast_successes >= quorum:
-                                cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
-                                               (value, millisec, key))
-                                connection.commit()
-                            else:
-                                # undo commit
-                                cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
-                                               (old_value, old_millisec, key))
-                                # and broadcast the commit undo
-                                for node in node_set:
-                                    key_value = {"key": key, "value": old_value, "millisec": old_millisec,
-                                                 "method": "put_server"}
-                                    url = "http://" + node + "/kv739/"
-                                    try:
-                                        x = requests.post(url, data=json.dumps(key_value))
-                                        if x.status_code == 200:
-                                            print("Successfully pushed undo commit to " + node)
-                                            broadcast_successes += 1
-                                        else:
-                                            print("Could not push undo commit to " + node)
-                                    except Exception as e:
-                                        print("Put server error: {}".format(e))
+                    except Exception as e:
+                        message = "Internal server error: {}".format(e)
+                        package = {"error": message}
+                        response = json.dumps(package)
 
-                        except Exception as e:
-                            message = "Internal server error: {}".format(e)
-                            package = {"error": message}
-                            response = json.dumps(package)
-
-                            self.send_response(500)
-                            self.send_header('Content-type', 'application/json')
-                            self.send_header("Content-Length", str(len(response)))
-                            self.end_headers()
-                            self.wfile.write(response.encode())
-                            return
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+                        return
                 else:
                     if method == 'put_server':
                         # do not accept server put from unreachable nodes
@@ -546,8 +543,8 @@ class HandleRequests(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response.encode())
-        elif route.path == "/peer_put/":
-            print('received peer_put...')
+        elif route.path == "/anti_entropy_put/":
+            print('received anti_entropy_put...')
             
             # accept valid peer put only
             node = self.headers.get('host')
@@ -669,7 +666,7 @@ def anti_entropy(cursor):
 
             attempt_count += 1
             connection = http.client.HTTPConnection(ip, port=int(port))
-            connection.request('POST', '/peer_put/', alldata_json, {'Content-Length': len(alldata_json), 'host': self_ip, 'port': self_port})
+            connection.request('POST', '/anti_entropy_put/', alldata_json, {'Content-Length': len(alldata_json), 'host': self_ip, 'port': self_port})
             http_response = connection.getresponse()
             if http_response.status == 200:
                 print('Executed anti entropy with node %s' % node)

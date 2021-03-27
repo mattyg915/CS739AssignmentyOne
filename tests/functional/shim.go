@@ -1,9 +1,9 @@
 package main
 
 /*
-#cgo CFLAGS: -I../../library
-#cgo LDFLAGS: -L../../library -l:lib739kv.so
-#include "lib739kv.h"
+#cgo CFLAGS: -I/u/d/s/dsirone/dist_systems/project2
+#cgo LDFLAGS: -L/u/d/s/dsirone/dist_systems/project2 -l:lib739kv.so
+#include "739kv_wrapper.h"
 #include <stdlib.h>
 */
 import "C"
@@ -21,7 +21,8 @@ func Kv739_init(address []string) int32 {
 	for i, val := range address {
 		a[i] = C.CString(val)
 	}
-	a[len(address)] = (*C.char)(unsafe.Pointer(uintptr(0)))
+	a[len(address)] = C.CString(string([]byte{0x00}))//(*C.char)(unsafe.Pointer(uintptr(0)))
+
 
 	return int32(C.kv739_init((**C.char)(unsafe.Pointer(cArray))))
 }
@@ -58,4 +59,20 @@ func Kv739_put(key string, value string, old_value []byte) int32 {
 
 func Kv739_shutdown() int32 {
 	return int32(C.kv739_shutdown())
+}
+
+func Kv739_die(server string, clean int) int32 {
+	return int32(C.kv739_die(C.CString(server), C.int(clean)))
+}
+
+func Kv739_partition(server string, reachable []string) int32 {
+	cArray := C.malloc(C.size_t(len(reachable)+1) * C.size_t(unsafe.Sizeof(uintptr(0))))
+        a := (*[1<<30 - 1]*C.char)(cArray)
+
+        for i, val := range reachable {
+                a[i] = C.CString(val)
+        }
+        a[len(reachable)] = C.CString(string([]byte{0x00}))//(*C.char)(unsafe.Pointer(uintptr(0)))
+
+	return int32(C.kv739_partition(C.CString(server), (**C.char)(unsafe.Pointer(cArray))))
 }

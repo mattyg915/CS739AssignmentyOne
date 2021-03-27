@@ -350,7 +350,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                         return
                     except Exception as e:
                         # Error communicating with leader, reject and reassign leader
-                        message = "Internal server error: {}".format(e)
+                        message = "Internal server error: leader unreachable. Try again."
                         package = {"error": message}
                         response = json.dumps(package)
 
@@ -431,7 +431,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                         return
                     except Exception as e:
                         # Error communicating with leader, reject and reassign leader
-                        message = "Internal server error: {}".format(e)
+                        message = "Internal server error: leader unreachable. Try again."
                         package = {"error": message}
                         response = json.dumps(package)
 

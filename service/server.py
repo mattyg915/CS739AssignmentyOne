@@ -188,7 +188,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                     "success": "new leader elected at index: {}".format(node_leader_index)}
                 response = json.dumps(package)
 
-                self.send_response(400)
+                self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.send_header("Content-Length", str(len(response)))
                 self.end_headers()
@@ -280,18 +280,49 @@ class HandleRequests(BaseHTTPRequestHandler):
 
                         # broadcast new leader
                         leader_elected = False
-                        while leader_elected is not True:
+                        failures = 0
+                        max_failures = len(node_list) - quorum
+                        while leader_elected is False and failures <= max_failures:
                             node_leader_index += 1
                             node_leader = node_list[node_leader_index]
+
+                            # to simplify this, nodes cannot elect themselves
+                            if node_leader == node_self:
+                                failures += 1
+                                continue
+
+                            package = {"node_leader_index": node_leader_index, "method": "new_leader_notify"}
+                            url = "http://" + node_leader + "/kv739/"
+                            try:
+                                res = requests.post(url, data=json.dumps(package))
+                                if res.status_code == 200 and node_leader in res.url:
+                                    leader_elected = True
+                            except Exception as e:
+                                failures += 1
+                                print("Error sending leader elect message: {}".format(e))
+
+                        if (leader_elected):
                             for node in node_set:
+                                if node == node_leader:
+                                    break
                                 package = {"node_leader_index": node_leader_index, "method": "new_leader_notify"}
                                 url = "http://" + node + "/kv739/"
                                 try:
-                                    res = requests.post(url, data=json.dumps(package))
-                                    if res.status_code == 200 and res.headers.get('host') == node_leader:
-                                        leader_elected = True
+                                    requests.post(url, data=json.dumps(package))
                                 except Exception as e:
                                     print("Error sending leader elect message: {}".format(e))
+                        else:
+                            print("failed to elect new leader, system shutdown")
+                            for node in node_set:
+                                package = {}
+                                url = "http://" + node + "/die/"
+                                try:
+                                    requests.get(url, data=json.dumps(package))
+                                except Exception as e:
+                                    print("Error killing: {}".format(e))
+                            global KEEP_RUNNING
+                            KEEP_RUNNING = False
+                            server.shutdown()
                         return
 
                 if result is not None:

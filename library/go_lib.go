@@ -85,6 +85,7 @@ func kv739_init(server_names **C.char) int32 {
 		srvr := C.GoString(elem)
 		err := validateServer(srvr)
 		if err != nil {
+			fmt.Println("[kv739_init] Invalid server address")
 			return -1
 		}
 		init_list[i] = C.GoString(elem)
@@ -436,7 +437,7 @@ func do_kv739_get(key *C.char, value *C.char, server string) int32 {
 	}
 
 	if res.StatusCode() == 500 {
-		fmt.Println("Request Error: SQL Error")
+		fmt.Println("Request Error: ", string(res.Body()))
 		return -1
 	}
 
@@ -540,7 +541,7 @@ func do_kv739_put(key *C.char, value *C.char, old_value *C.char, server string) 
 	}
 
 	if res.StatusCode() == 500 {
-		fmt.Println("Request Error: SQL Error")
+		fmt.Println("Request Error: ", string(res.Body()))
 		return -1
 	}
 

@@ -8,26 +8,28 @@ import (
 	"os"
 	"os/exec"
 	//"strings"
-	"sync"
+	"errors"
 	"strconv"
+	"sync"
 	"syscall"
 	"testing"
-	"errors"
 	"time"
 )
 
 var map_mutex sync.Mutex
 
-const server_path = "/u/d/s/dsirone/dist_systems/project2/keyvalue_server.py"
-const database_path = "/u/d/s/dsirone/dist_systems/client/CS739AssignmentyOne/tests/functional/database-localhost:5000.db"
-const base_path = "/u/d/s/dsirone/dist_systems/client/CS739AssignmentyOne/tests/functional/"
-const nodes_path = "../../service/nodes_local.txt"
+const server_path = "../../service/server.py"
+const database_path = "./5000kv.db"
+const base_path = "/data/projects/phd_stuff/courses/dist_systems/project1/CS739AssignmentyOne/tests/functional"
+const nodes_path = "./nodes.txt"
+
 /*
 func TestShutdown(t *testing.T) {
 	if Kv739_shutdown() == 0 {
 		t.Errorf("Shutdown returned 0 without init")
 	}
 }*/
+/*
 func TestAvailability3(t *testing.T) {
 	chans, pids, err := launchServers(server_path, 3, true)
         if err != nil {
@@ -51,7 +53,7 @@ func TestAvailability3(t *testing.T) {
                 t.Errorf("Failed to partition 5002")
         }
 
-	// localhost:5000 
+	// localhost:5000
 	//if e := Kv739_init([]string{"localhost:5000"}); e != 0 {
         //        panic("failed to init server")
         //}
@@ -79,9 +81,9 @@ func TestAvailability3(t *testing.T) {
         }
 
         //old_val := make([]byte, 2049)
-        /*if e := Kv739_put("val2", "val2", old_val); e == -1 {
+        //*if e := Kv739_put("val2", "val2", old_val); e == -1 {
                 t.Errorf("Failed to insert val; val1 #1")
-        }*/
+        //}
 
          e1 := Kv739_get("val2", old_val)
 
@@ -97,9 +99,9 @@ func TestAvailability3(t *testing.T) {
 	e2 := Kv739_get("val2", old_val)
 
 
-        /*if string(old_val[:bytes.IndexByte(old_val, 0)]) != "val2" {
-                t.Errorf("Wrong value: %v", old_val)
-        }*/
+        //if string(old_val[:bytes.IndexByte(old_val, 0)]) != "val2" {
+        //        t.Errorf("Wrong value: %v", old_val)
+        //}
 
         if e := Kv739_shutdown(); e != 0 {
                 panic("failed to shutdown")
@@ -113,9 +115,9 @@ func TestAvailability3(t *testing.T) {
         e3 := Kv739_get("val2", old_val)
 
 
-        /*if string(old_val[:bytes.IndexByte(old_val, 0)]) != "val2" {
-                t.Errorf("Wrong value: %v", old_val)
-        }*/
+        //if string(old_val[:bytes.IndexByte(old_val, 0)]) != "val2" {
+        //        t.Errorf("Wrong value: %v", old_val)
+        //}
 
         if e := Kv739_shutdown(); e != 0 {
                 panic("failed to shutdown")
@@ -129,8 +131,7 @@ func TestAvailability3(t *testing.T) {
 	killServers(chans, pids)
 
 
-}
-
+}*/
 
 func TestServerAddress(t *testing.T) {
 	/*if Kv739_init([]string{"aaaaaaaaaaaaa"}) != -1 {
@@ -203,36 +204,36 @@ func launchServers(server_exe_path string, num_servers int, killDB bool) ([]chan
 				<-killChans[j]
 			}
 
-			return killChans, []int{}, errors.New("Error launching server " + string(i))
+			return killChans, []int{}, errors.New("Error launching server " + strconv.Itoa(i))
 		}
 	}
 
 	return killChans, pids, nil
 }
 
-
 func launchServerIndex(server_exe_path string, idx int, num_servers int, killSwitch chan int, killDB bool) (int, error) {
-	if _, err := os.Stat(base_path + "database-localhost:" + strconv.Itoa(5000 + idx) + ".db"); err == nil {
+	if _, err := os.Stat(base_path + strconv.Itoa(5000+idx) + "kv.db"); err == nil {
 		if killDB {
-			e := os.Remove(base_path + "database-localhost:" + strconv.Itoa(5000 + idx) + ".db")
+			e := os.Remove(base_path + strconv.Itoa(5000+idx) + "kv.db")
 			if e != nil {
 				return -1, e
 			}
-			log.Printf("[killDb] Killed the db at %v", base_path + "database-localhost:" + strconv.Itoa(5000 + idx) + ".db")
+			log.Printf("[killDb] Killed the db at %v", base_path+strconv.Itoa(5000+idx)+"kv.db")
 		}
 	}
 
+	extra_args := make([]string, 2)
+	extra_args[0] = nodes_path
+	extra_args[1] = strconv.Itoa(idx)
 
-	extra_args := make([]string, num_servers)
-	extra_args[0] = "localhost:" + strconv.Itoa(5000 + idx)
-	j := 1
+	/*j := 1
 	for i := 0; i < num_servers; i++ {
 		if i == idx {
 			continue
 		}
 		extra_args[j] = "localhost:" + strconv.Itoa(5000 + i)
 		j += 1
-	}
+	}*/
 	//cmdArgs := []string{"localhost:" + string(5000 + idx), }
 	log.Printf("Server command: %v", extra_args)
 	cmdServer := exec.Command(server_exe_path, extra_args...)
@@ -250,10 +251,10 @@ func launchServerIndex(server_exe_path string, idx int, num_servers int, killSwi
 		fmt.Printf("Killing process with pid %v\n", cmdServer.Process.Pid)
 		cmdServer.Wait()
 		/*child, _ := os.FindProcess(cmdServer.Process.Pid + 1)
-		if er := child.Kill(); er != nil {
-                        log.Fatal("failed to kill process: ", er)
-                }
-		child.Wait()*/
+				if er := child.Kill(); er != nil {
+		                        log.Fatal("failed to kill process: ", er)
+		                }
+				child.Wait()*/
 
 		var err error
 		err = nil
@@ -287,7 +288,7 @@ func launchServer(server_exe_path string, killSwitch chan int, killDB bool, cach
 		}
 	}
 
-	cmdArgs := []string{"localhost:5000"}
+	cmdArgs := []string{nodes_path, "0"}
 	cmdServer := exec.Command(server_exe_path, cmdArgs...)
 	if err := cmdServer.Start(); err != nil {
 		log.Printf("Failed to start cmd: %v", err)
@@ -303,10 +304,10 @@ func launchServer(server_exe_path string, killSwitch chan int, killDB bool, cach
 		fmt.Printf("Killing process with pid %v\n", cmdServer.Process.Pid)
 		cmdServer.Wait()
 		/*child, _ := os.FindProcess(cmdServer.Process.Pid + 1)
-		if er := child.Kill(); er != nil {
-                        log.Fatal("failed to kill process: ", er)
-                }
-		child.Wait()*/
+				if er := child.Kill(); er != nil {
+		                        log.Fatal("failed to kill process: ", er)
+		                }
+				child.Wait()*/
 
 		var err error
 		err = nil
@@ -329,6 +330,7 @@ func launchServer(server_exe_path string, killSwitch chan int, killDB bool, cach
 	return cmdServer.Process.Pid, nil
 }
 
+/*
 func TestGetInputParams(t *testing.T) {
 	killSwitch := make(chan int)
 	// Nuke database and start fresh
@@ -371,30 +373,29 @@ func TestGetInputParams(t *testing.T) {
 		t.Errorf("Wrong value: %v", old_val)
 	}
 
-	/*
-	if e := Kv739_put("va12312p[]", "val2", old_val); e != -1 {
-		t.Errorf("Failed to insert val; val3 #3")
-	}
+		if e := Kv739_put("va12312p[]", "val2", old_val); e != -1 {
+			t.Errorf("Failed to insert val; val3 #3")
+		}
 
-	if e := Kv739_get("va12312p[]", old_val); e != -1 {
-		t.Errorf("Failed to retrieve val; val3 #3")
-	}
+		if e := Kv739_get("va12312p[]", old_val); e != -1 {
+			t.Errorf("Failed to retrieve val; val3 #3")
+		}
 
-	if e := Kv739_put("va12312p#1@%`\x12\x01", "val2", old_val); e != -1 {
-		t.Errorf("Failed to insert val; val4 #4")
-	}
+		if e := Kv739_put("va12312p#1@%`\x12\x01", "val2", old_val); e != -1 {
+			t.Errorf("Failed to insert val; val4 #4")
+		}
 
-	if e := Kv739_get("va12312p#1@%`\x01", old_val); e != -1 {
-		t.Errorf("Failed to retrieve val; val4 #4")
-	}
+		if e := Kv739_get("va12312p#1@%`\x01", old_val); e != -1 {
+			t.Errorf("Failed to retrieve val; val4 #4")
+		}
 
-	if e := Kv739_put("va12312p", "val2[]", old_val); e != -1 {
-		t.Errorf("Failed to insert val; val5 #5")
-	}
+		if e := Kv739_put("va12312p", "val2[]", old_val); e != -1 {
+			t.Errorf("Failed to insert val; val5 #5")
+		}
 
-	if e := Kv739_put("va12312p", "val2$123&\x123`", old_val); e < 0 {
-		t.Errorf("Failed to insert val; val5 #5")
-	}*/
+		if e := Kv739_put("va12312p", "val2$123&\x123`", old_val); e < 0 {
+			t.Errorf("Failed to insert val; val5 #5")
+		}
 
 	if er := Kv739_shutdown(); er != 0 {
 		t.Errorf("Failed to shutdown")
@@ -433,10 +434,9 @@ func TestHalting(t *testing.T) {
 		t.Errorf("Failed to retrieve val; val1 #1")
 	}
 
-
 	if er := Kv739_shutdown(); er != 0 {
-                t.Errorf("Failed to shutdown")
-        }
+		t.Errorf("Failed to shutdown")
+	}
 
 	killSwitch <- 1
 	<-killSwitch
@@ -470,9 +470,8 @@ func TestHalting(t *testing.T) {
 	}
 
 	if er := Kv739_shutdown(); er != 0 {
-                t.Errorf("Failed to shutdown")
-        }
-
+		t.Errorf("Failed to shutdown")
+	}
 
 	killSwitch <- 1
 	<-killSwitch
@@ -490,9 +489,8 @@ func TestHalting(t *testing.T) {
 	}
 
 	if e := Kv739_init([]string{"localhost:5000"}); e != 0 {
-                panic("failed to init server")
-        }
-
+		panic("failed to init server")
+	}
 
 	if e := Kv739_get("val2", old_val1); e != 0 {
 		t.Errorf("Failed to retrieve val; val1 #1")
@@ -515,7 +513,7 @@ func TestHalting(t *testing.T) {
 		fmt.Printf("Server alive with pid: %v\n", pid)
 	}
 
-}
+}*/
 
 func generateRandom() (string, string) {
 	str_map := "abcd1234"
@@ -555,46 +553,47 @@ func writer(m *map[string]string, wg *sync.WaitGroup) {
 }
 func killServers(chans []chan int, pids []int) {
 	for i := 0; i < len(chans); i++ {
-                        chans[i] <- 1
-                        <-chans[i]
-                        time.Sleep(time.Second)
-                        if !checkAlive(pids[i]) {
-                                fmt.Printf("Server died pid: %v\n", pids[i])
-                        } else {
-                                fmt.Printf("Server alive with pid: %v\n", pids[i])
-                        }
-        }
+		chans[i] <- 1
+		<-chans[i]
+		time.Sleep(time.Second)
+		if !checkAlive(pids[i]) {
+			fmt.Printf("Server died pid: %v\n", pids[i])
+		} else {
+			fmt.Printf("Server alive with pid: %v\n", pids[i])
+		}
+	}
 
 }
 
+/*
 func TestAvailability1(t *testing.T) {
 	chans, pids, err := launchServers(server_path, 3, true)
 	if err != nil {
 		t.Errorf("Failed to launch servers")
 	}
-	/*if err == nil {
-		for i := 0; i < 3; i++ {
-			chans[i] <- 1
-			<-chans[i]
-			time.Sleep(time.Second)
-			if !checkAlive(pids[i]) {
-				fmt.Printf("Server died pid: %v\n", pids[i])
-			} else {
-				fmt.Printf("Server alive with pid: %v\n", pids[i])
-			}
-		}
-	} else {
-		t.Errorf("Error creating servers")
-	}*/
+	//if err == nil {
+	//	for i := 0; i < 3; i++ {
+	//		chans[i] <- 1
+	//		<-chans[i]
+	//		time.Sleep(time.Second)
+	//		if !checkAlive(pids[i]) {
+	//			fmt.Printf("Server died pid: %v\n", pids[i])
+	//		} else {
+	//			fmt.Printf("Server alive with pid: %v\n", pids[i])
+	//		}
+	//	}
+	//} else {
+	//	t.Errorf("Error creating servers")
+	//}
 
 	if e := Kv739_init([]string{"localhost:5000"}); e != 0 {
                 panic("failed to init server")
         }
 
 	killServers(chans[0:1], pids[0:1])
-	/*if e := Kv739_die(string("localhost:5000"), 0); e != 0 {
-		t.Errorf("Failed to kill 5001")
-	}*/
+	//if e := Kv739_die(string("localhost:5000"), 0); e != 0 {
+	//	t.Errorf("Failed to kill 5001")
+	//}
 
 	old_val := make([]byte, 2049)
 	if e := Kv739_put("val2", "val2", old_val); e == -1 {
@@ -669,7 +668,7 @@ func TestAvailability4(t *testing.T) {
                 t.Errorf("Failed to partition 5002")
         }
 
-	// localhost:5000 
+	// localhost:5000
 	//if e := Kv739_init([]string{"localhost:5000"}); e != 0 {
         //        panic("failed to init server")
         //}
@@ -697,9 +696,9 @@ func TestAvailability4(t *testing.T) {
         }
 
         //old_val := make([]byte, 2049)
-        /*if e := Kv739_put("val2", "val2", old_val); e == -1 {
-                t.Errorf("Failed to insert val; val1 #1")
-        }*/
+        //if e := Kv739_put("val2", "val2", old_val); e == -1 {
+        //        t.Errorf("Failed to insert val; val1 #1")
+        //}
 
          e1 := Kv739_get("val2", old_val)
 
@@ -715,9 +714,9 @@ func TestAvailability4(t *testing.T) {
 	e2 := Kv739_get("val2", old_val)
 
 
-        /*if string(old_val[:bytes.IndexByte(old_val, 0)]) != "val2" {
-                t.Errorf("Wrong value: %v", old_val)
-        }*/
+        //if string(old_val[:bytes.IndexByte(old_val, 0)]) != "val2" {
+        //        t.Errorf("Wrong value: %v", old_val)
+        //}
 
         if e := Kv739_shutdown(); e != 0 {
                 panic("failed to shutdown")
@@ -731,9 +730,9 @@ func TestAvailability4(t *testing.T) {
         e3 := Kv739_get("val2", old_val)
 
 
-        /*if string(old_val[:bytes.IndexByte(old_val, 0)]) != "val2" {
-                t.Errorf("Wrong value: %v", old_val)
-        }*/
+        //if string(old_val[:bytes.IndexByte(old_val, 0)]) != "val2" {
+        //        t.Errorf("Wrong value: %v", old_val)
+        //}
 
         if e := Kv739_shutdown(); e != 0 {
                 panic("failed to shutdown")
@@ -904,11 +903,55 @@ func TestConsistency3(t *testing.T) {
         }
 
 	killServers(chans, pids)
+}*/
+
+/*---------project 3 tests----------*/
+
+func TestLeaderElection1(t *testing.T) {
+	chans, pids, err := launchServers(server_path, 5, true)
+	if err != nil {
+		t.Errorf("Failed to launch servers")
+	}
+
+	old_val := make([]byte, 2049)
+	if e := Kv739_init([]string{"localhost:5000"}); e != 0 {
+		panic("failed to init server")
+	}
+
+	//Killing the main server now
+	if e := Kv739_die("localhost:5000", 1); e != 0 {
+		panic("failed to kill server")
+	}
+
+	//Checking get() and put()
+	if e := Kv739_put("val1", "val1", old_val); e != -1 {
+		t.Errorf("Expected failure but successed; val1 #1")
+	}
+
+	/*old_val1 := make([]byte, 2049)
+	if e := Kv739_get("val1", old_val1); e == -1 {
+		t.Errorf("Failed to insert val; val1 #1")
+	}*/
+
+	old_val1 := make([]byte, 2049)
+
+	//Checking get() and put()
+	if e := Kv739_put("val1", "val1", old_val); e == -1 {
+		t.Errorf("Failed to insert val; val1 #1")
+	}
+
+	if e := Kv739_get("val1", old_val1); e == -1 {
+		t.Errorf("Failed to get val; val1 #1")
+	}
+
+	if string(old_val1[:bytes.IndexByte(old_val1, 0)]) != "val1" {
+		t.Errorf("Wrong value: %v", string(old_val1[:bytes.IndexByte(old_val1, 0)]))
+	} else {
+		t.Logf("Passed the value test")
+	}
+
+	killServers(chans[1:], pids[1:])
 }
-
-
-
-
 
 /*
 func TestLongInput(t *testing.T) {

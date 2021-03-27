@@ -387,7 +387,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                         else:
                             print("Could not access " + node)
                     except Exception as e:
-                        print("Put server error: {}".format(e))
+                        print("peer_get error: {}".format(e))
 
                 if cur_value is None:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}

@@ -145,6 +145,14 @@ class HandleRequests(BaseHTTPRequestHandler):
         global deadnode_set
         global self_ip
         global self_port
+        global node_leader
+        global node_leader_index
+
+        content_len = int(self.headers.get('Content-Length'))
+        post_body = self.rfile.read(content_len)
+        decoded_body = post_body.decode()
+        body = json.loads(decoded_body)
+
         try:
             connection = sqlite3.connect(dbPath, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
         except Exception as e:
@@ -159,11 +167,6 @@ class HandleRequests(BaseHTTPRequestHandler):
             return
 
         cursor = connection.cursor()
-        content_len = int(self.headers.get('Content-Length'))
-        post_body = self.rfile.read(content_len)
-
-        decoded_body = post_body.decode()
-        body = json.loads(decoded_body)
         try:
             route = urlparse(self.path)
         except UnicodeEncodeError:
@@ -178,6 +181,20 @@ class HandleRequests(BaseHTTPRequestHandler):
             return
 
         if route.path == "/kv739/":
+            if 'method' in body and body['method'] == 'new_leader_notify':
+                node_leader_index = body["node_leader_index"]
+                node_leader = node_list[node_leader_index]
+                package = {
+                    "success": "new leader elected at index: {}".format(node_leader_index)}
+                response = json.dumps(package)
+
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.send_header("Content-Length", str(len(response)))
+                self.end_headers()
+                self.wfile.write(response.encode())
+                return
+
             if 'method' not in body or 'key' not in body:
                 package = {"error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
                 response = json.dumps(package)
@@ -192,7 +209,7 @@ class HandleRequests(BaseHTTPRequestHandler):
             key = body['key']
             method = body['method']
             print("request with method " + method)
-            if (method != 'get' and method != 'peer_get' and method != 'delete') and 'value' not in body:
+            if (method != 'get' and method != 'peer_get') and 'value' not in body:
                 package = {
                     "error": "missing required key. 'key' and 'method' are required, 'value' also required for puts"}
                 response = json.dumps(package)
@@ -233,9 +250,10 @@ class HandleRequests(BaseHTTPRequestHandler):
                 self.wfile.write(response.encode())
                 return
 
+
             if method == 'get':
                 # only the leader can handle GETs
-                if (node_self != node_leader): # really should have a better way to check leader
+                if (node_self != node_leader):
                     leader_url = "http://" + node_leader + "/kv739/"
                     get_package = {"key": key, "method": "get"}
                     try:
@@ -249,20 +267,31 @@ class HandleRequests(BaseHTTPRequestHandler):
                         self.wfile.write(response.encode())
                         return
                     except Exception as e:
-                        print("Error communicating with leader, reject and reassign leader")
+                        # Error communicating with leader, reject and reassign leader
                         message = "Internal server error: {}".format(e)
                         package = {"error": message}
                         response = json.dumps(package)
-                        global node_leader_index
-                        global node_leader
-                        node_leader_index += 1
-                        node_leader = node_list[node_leader_index]
 
                         self.send_response(500)
                         self.send_header('Content-type', 'application/json')
                         self.send_header("Content-Length", str(len(response)))
                         self.end_headers()
                         self.wfile.write(response.encode())
+
+                        # broadcast new leader
+                        leader_elected = False
+                        while leader_elected is not True:
+                            node_leader_index += 1
+                            node_leader = node_list[node_leader_index]
+                            for node in node_set:
+                                package = {"node_leader_index": node_leader_index, "method": "new_leader_notify"}
+                                url = "http://" + node + "/kv739/"
+                                try:
+                                    res = requests.post(url, data=json.dumps(package))
+                                    if res.status_code == 200 and res.headers.get('host') == node_leader:
+                                        leader_elected = True
+                                except Exception as e:
+                                    print("Error sending leader elect message: {}".format(e))
                         return
 
                 if result is not None:
@@ -302,18 +331,6 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
 
-            elif method == 'delete':
-                print("execute delete")
-                cursor.execute('''DELETE FROM 'records' WHERE key = ?''', (key,))
-
-                connection.commit()
-                package = {"key": key, "status": "deleted"}
-                response = json.dumps(package)
-                self.send_response(200)
-                self.send_header('Content-type', 'application/json')
-                self.send_header("Content-Length", str(len(response)))
-                self.end_headers()
-                self.wfile.write(response.encode())
             else:
                 value = body['value']
                 valid_string = self.validate_string(value)
@@ -662,7 +679,7 @@ class Server(ThreadingMixIn, HTTPServer):
         print(node_list)
         print(node_self)
         if (node_self == node_list[0]):
-            print("I am the leader (at least unless/until I fail)")
+            print("I am the leader (until I die or you find someone better)")
 
         dbName = self_port + 'kv.db'
         dbPath = os.path.join(path, dbName)

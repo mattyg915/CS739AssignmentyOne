@@ -79,7 +79,9 @@ int main(int argc, char** argv)
         //printf("%s\n", server);
     }
     
-    server_names[count] = NULL;
+    server_names[0] = "royal-09:5000";
+    server_names[1] = 0;
+    count = 1;
     
     int j = 0;
     for (;j<count;j++)
@@ -88,7 +90,7 @@ int main(int argc, char** argv)
     }
     
     printf("init\n");
-    kv739_init(server_names);
+    printf("%d\n", kv739_init(server_names));
     
     //run tests
     //char* key = NULL;
@@ -106,17 +108,17 @@ int main(int argc, char** argv)
     kv739_get("key", value2);
     printf("%s\n", value2);
     
-    printf("partition\n");
-    char* reachable[] = {server_names[0]};
-    kv739_partition(server_names[0], reachable);
+    //printf("partition\n");
+    //char* reachable[] = {server_names[0], 0};
+    //kv739_partition(server_names[0], reachable);
     
-    printf("die\n");
+    //printf("die\n");
     int die = kv739_die(server_names[0], 1);
     printf("%d\n", die);
     //when a test returns, pause and rennovate severs if needed
     
-    printf("shutdown\n");
-    kv739_shutdown();
+    //printf("shutdown\n");
+    //kv739_shutdown();
     
     //free server list
     int i = 0;

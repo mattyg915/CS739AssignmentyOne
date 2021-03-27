@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from urllib.parse import urlparse
 from socketserver import ThreadingMixIn
 from datetime import datetime
+from collections import OrderedDict
 
 import http.client
 import threading
@@ -24,11 +25,14 @@ dbPath = ""
 KEEP_RUNNING = True
 ENTROPY_MAX = 60  # in seconds
 entropy_lock = False  # in case the previous anti entropy is unfinished, do not start the next yet
-node_set = set()
-node_list = set()
+node_set = set() # does not include self
+node_list = OrderedDict()  # includes self
 deadnode_set = set()
 self_ip = ''
 self_port = -1
+node_leader = ""
+node_leader_index = 0
+node_self = ""
 entropy_counter = 0
 quorum = 0
 
@@ -230,7 +234,37 @@ class HandleRequests(BaseHTTPRequestHandler):
                 return
 
             if method == 'get':
-                peer_results = dict()
+                # only the leader can handle GETs
+                if (node_self != node_leader): # really should have a better way to check leader
+                    leader_url = "http://" + node_leader + "/kv739/"
+                    get_package = {"key": key, "method": "get"}
+                    try:
+                        res = requests.post(leader_url, data=json.dumps(get_package))
+                        result_body = res.json()
+                        response = json.dumps(result_body)
+                        self.send_response(200)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+                        return
+                    except Exception as e:
+                        print("Error communicating with leader, reject and reassign leader")
+                        message = "Internal server error: {}".format(e)
+                        package = {"error": message}
+                        response = json.dumps(package)
+                        global node_leader_index
+                        global node_leader
+                        node_leader_index += 1
+                        node_leader = node_list[node_leader_index]
+
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+                        return
+
                 if result is not None:
                     cur_value = result[0]
                     cur_timestamp = int(result[1])
@@ -596,6 +630,8 @@ class Server(ThreadingMixIn, HTTPServer):
         global node_set
         global self_ip
         global self_port
+        global node_self
+        global node_leader
         global node_list
         global entropy_counter
         global ENTROPY_MAX
@@ -612,15 +648,21 @@ class Server(ThreadingMixIn, HTTPServer):
         node_address = node_list[int(node_index)].split(':')
         self_ip = node_address[0]
         self_port = node_address[1]
+        node_self = "{}:{}".format(self_ip, self_port)
+        node_leader = node_list[node_leader_index]
         for node in node_list:
             node_set.add(node)
-        print(node_set)
 
         # set quorum value
         quorum = (len(node_set) // 2) + 1
 
         # remove self from nodelist
         node_set.remove(node_list[int(node_index)])
+        print(node_set)
+        print(node_list)
+        print(node_self)
+        if (node_self == node_list[0]):
+            print("I am the leader (at least unless/until I fail)")
 
         dbName = self_port + 'kv.db'
         dbPath = os.path.join(path, dbName)

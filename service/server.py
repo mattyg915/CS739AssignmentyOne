@@ -94,7 +94,7 @@ class HandleRequests(BaseHTTPRequestHandler):
 
         # first make sure a quorum is still possible
         healthy_list = self.check_cluster_health()
-        if len(healthy_list) < quorum:
+        if len(healthy_list) < quorum - 1: # - 1 because self is a healthy node
             print("failed to elect new leader, quorum impossible, system shutdown")
             for node in node_set:
                 package = {}
@@ -400,7 +400,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                 else:
                     package = {"exists": "no", "former_value": "[]", "new_value": "[]"}
 
-            else:
+            elif method == 'put' or method == 'peer_put':
                 value = body['value']
                 valid_string = self.validate_string(value)
                 if valid_string is not True:
@@ -414,49 +414,68 @@ class HandleRequests(BaseHTTPRequestHandler):
                     return
 
                 new_millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-                if result is not None:
+
+                # only the leader can handle a put
+                if method == 'put' and node_self != node_leader:
+                    leader_url = "http://" + node_leader + "/kv739/"
+                    put_package = {"key": key, "value": value, "method": "put"}
+                    try:
+                        res = requests.post(leader_url, data=json.dumps(put_package))
+                        result_body = res.json()
+                        response = json.dumps(result_body)
+                        self.send_response(200)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+                        return
+                    except Exception as e:
+                        # Error communicating with leader, reject and reassign leader
+                        message = "Internal server error: {}".format(e)
+                        package = {"error": message}
+                        response = json.dumps(package)
+
+                        self.send_response(500)
+                        self.send_header('Content-type', 'application/json')
+                        self.send_header("Content-Length", str(len(response)))
+                        self.end_headers()
+                        self.wfile.write(response.encode())
+
+                        self.elect_leader()
+                        return
+
+                if result is not None and method != "peer_put":
                     try:
                         print("broadcast put update")
-                        millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
-                        broadcast_successes = 0
-                        old_value = result[0]
-                        old_millisec = result[1]
+                        healthy_nodes = self.check_cluster_health()
+                        if len(healthy_nodes) < (quorum - 1):
+                            message = "Cannot achieve write quorum"
+                            package = {"error": message}
+                            response = json.dumps(package)
 
-                        for node in node_set:
-                            key_value = {"key": key, "value": value, "millisec": millisec, "method": "put_server"}
+                            self.send_response(500)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
+                            return
+
+                        millisec = int((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000)
+                        cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
+                                       (value, millisec, key))
+                        connection.commit()
+
+                        for node in healthy_nodes.values():
+                            key_value = {"key": key, "value": value, "millisec": millisec, "method": "peer_put"}
                             url = "http://" + node + "/kv739/"
                             try:
                                 x = requests.post(url, data=json.dumps(key_value))
                                 if x.status_code == 200:
                                     print("Successfully pushed update to " + node)
-                                    broadcast_successes += 1
                                 else:
                                     print("Could not push update to " + node)
                             except Exception as e:
                                 print("Put server error: {}".format(e))
-
-                        if broadcast_successes >= quorum:
-                            cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
-                                           (value, millisec, key))
-                            connection.commit()
-                        else:
-                            # undo commit
-                            cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
-                                           (old_value, old_millisec, key))
-                            # and broadcast the commit undo
-                            for node in node_set:
-                                key_value = {"key": key, "value": old_value, "millisec": old_millisec,
-                                             "method": "put_server"}
-                                url = "http://" + node + "/kv739/"
-                                try:
-                                    x = requests.post(url, data=json.dumps(key_value))
-                                    if x.status_code == 200:
-                                        print("Successfully pushed undo commit to " + node)
-                                        broadcast_successes += 1
-                                    else:
-                                        print("Could not push undo commit to " + node)
-                                except Exception as e:
-                                    print("Put server error: {}".format(e))
 
                     except Exception as e:
                         message = "Internal server error: {}".format(e)
@@ -470,7 +489,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                         self.wfile.write(response.encode())
                         return
                 else:
-                    if method == 'put_server':
+                    if method == 'peer_put':
                         # do not accept server put from unreachable nodes
                         node = self.headers.get('host')
                         if node not in node_set and node in deadnode_set:
@@ -509,7 +528,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                     print("broadcast put new value")
 
                     for node in node_set:
-                        key_value = {"key": key, "value": value, "millisec": new_millisec, "method": "put_server"}
+                        key_value = {"key": key, "value": value, "millisec": new_millisec, "method": "peer_put"}
                         url = "http://" + node + "/kv739/"
                         try:
                             x = requests.post(url, data=json.dumps(key_value))

@@ -372,12 +372,18 @@ class HandleRequests(BaseHTTPRequestHandler):
                     cur_timestamp = 0
 
                 # broadcast get to other servers to make sure no value has a higher timestamp
+                successes = 0
                 for node in node_set:
+                    if successes >= quorum - 1:
+                        break
+
                     get_package = {"key": key, "method": "peer_get"}
                     url = "http://" + node + "/kv739/"
                     try:
+                        print("Contacting {} to achieve read quorum".format(node))
                         res = requests.post(url, data=json.dumps(get_package))
                         if res.status_code == 200:
+                            successes += 1
                             result_body = res.json()
                             peer_result = result_body["former_value"]
                             peer_timestamp = result_body["timestamp"]

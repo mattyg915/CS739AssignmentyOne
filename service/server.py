@@ -137,6 +137,17 @@ class HandleRequests(BaseHTTPRequestHandler):
 
         return
 
+    def forward_to_leader(self, url, package):
+        res = requests.post(url, data=json.dumps(package))
+        result_body = res.json()
+        response = json.dumps(result_body)
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header("Content-Length", str(len(response)))
+        self.end_headers()
+        self.wfile.write(response.encode())
+        return
+
     def do_GET(self):
         global node_set
 
@@ -325,29 +336,30 @@ class HandleRequests(BaseHTTPRequestHandler):
                     leader_url = "http://" + node_leader + "/kv739/"
                     get_package = {"key": key, "method": "get"}
                     try:
-                        res = requests.post(leader_url, data=json.dumps(get_package))
-                        result_body = res.json()
-                        response = json.dumps(result_body)
-                        self.send_response(200)
-                        self.send_header('Content-type', 'application/json')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
+                        self.forward_to_leader(leader_url, get_package)
                         return
                     except Exception as e:
                         # Error communicating with leader, reject and reassign leader
-                        message = "Internal server error: leader unreachable. Try again."
-                        package = {"error": message}
-                        response = json.dumps(package)
-
-                        self.send_response(500)
-                        self.send_header('Content-type', 'application/json')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
-
+                        print("Internal server error: leader unreachable. Electing new leader. Error message: {}".format(e))
                         self.elect_leader()
-                        return
+
+                        if (node_self != node_leader):
+                            leader_url = "http://" + node_leader + "/kv739/"
+                            try:
+                                self.forward_to_leader(leader_url, get_package)
+                                return
+                            except Exception as e:
+                                # Error communicating with leader, reject and reassign leader
+                                message = "Internal server error: leader unreachable. Try again. Error mesage: {}".format(
+                                    e)
+                                package = {"error": message}
+                                response = json.dumps(package)
+
+                                self.send_response(500)
+                                self.send_header('Content-type', 'application/json')
+                                self.send_header("Content-Length", str(len(response)))
+                                self.end_headers()
+                                self.wfile.write(response.encode())
 
                 if result is not None:
                     cur_value = result[0]
@@ -406,28 +418,30 @@ class HandleRequests(BaseHTTPRequestHandler):
                     leader_url = "http://" + node_leader + "/kv739/"
                     put_package = {"key": key, "value": value, "method": "put"}
                     try:
-                        res = requests.post(leader_url, data=json.dumps(put_package))
-                        result_body = res.json()
-                        response = json.dumps(result_body)
-                        self.send_response(200)
-                        self.send_header('Content-type', 'application/json')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
+                        self.forward_to_leader(leader_url, put_package)
                         return
                     except Exception as e:
                         # Error communicating with leader, reject and reassign leader
-                        message = "Internal server error: leader unreachable. Try again."
-                        package = {"error": message}
-                        response = json.dumps(package)
-
-                        self.send_response(500)
-                        self.send_header('Content-type', 'application/json')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
-
+                        print(
+                            "Internal server error: leader unreachable. Electing new leader. Error message: {}".format(
+                                e))
                         self.elect_leader()
+                        if (node_self != node_leader):
+                            leader_url = "http://" + node_leader + "/kv739/"
+                            try:
+                                self.forward_to_leader(leader_url, put_package)
+                                return
+                            except Exception as e:
+                                message = "Internal server error: leader unreachable. Try again. Error mesage: {}".format(
+                                    e)
+                                package = {"error": message}
+                                response = json.dumps(package)
+
+                                self.send_response(500)
+                                self.send_header('Content-type', 'application/json')
+                                self.send_header("Content-Length", str(len(response)))
+                                self.end_headers()
+                                self.wfile.write(response.encode())
                         return
 
                 if result is not None and method != "peer_put":

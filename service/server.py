@@ -95,7 +95,7 @@ class HandleRequests(BaseHTTPRequestHandler):
         # first make sure a quorum is still possible
         healthy_list = self.check_cluster_health()
         if len(healthy_list) < quorum - 1: # - 1 because self is a healthy node
-            print("failed to elect new leader, quorum impossible, system shutdown")
+            print("failed to elect new leader, quorum impossible")
             for node in node_set:
                 package = {}
                 url = "http://" + node + "/die/"
@@ -103,8 +103,7 @@ class HandleRequests(BaseHTTPRequestHandler):
                     requests.get(url, data=json.dumps(package))
                 except Exception as e:
                     print("Error killing: {}".format(e))
-            KEEP_RUNNING = False
-            server.shutdown()
+            return False
 
         leader_elected = False
         while leader_elected is False:
@@ -124,18 +123,10 @@ class HandleRequests(BaseHTTPRequestHandler):
                 print("Error electing new leader: {}".format(e))
 
         if leader_elected is not True:
-            print("failed to elect new leader system shutdown")
-            for node in node_set:
-                package = {}
-                url = "http://" + node + "/die/"
-                try:
-                    requests.get(url, data=json.dumps(package))
-                except Exception as e:
-                    print("Error killing: {}".format(e))
-            KEEP_RUNNING = False
-            server.shutdown()
-
-        return
+            print("failed to elect new leader")
+            return False
+        else:
+            return True
 
     def forward_to_leader(self, url, package):
         res = requests.post(url, data=json.dumps(package))
@@ -341,7 +332,19 @@ class HandleRequests(BaseHTTPRequestHandler):
                     except Exception as e:
                         # Error communicating with leader, reject and reassign leader
                         print("Internal server error: leader unreachable. Electing new leader. Error message: {}".format(e))
-                        self.elect_leader()
+                        election_success = self.elect_leader()
+                        if election_success is not True:
+                            # Error electing leader
+                            message = "Internal server error: leader unreachable, unable to elect leader: {}".format(
+                                e)
+                            package = {"error": message}
+                            response = json.dumps(package)
+
+                            self.send_response(500)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
 
                         if (node_self != node_leader):
                             leader_url = "http://" + node_leader + "/kv739/"
@@ -425,7 +428,20 @@ class HandleRequests(BaseHTTPRequestHandler):
                         print(
                             "Internal server error: leader unreachable. Electing new leader. Error message: {}".format(
                                 e))
-                        self.elect_leader()
+                        election_success = self.elect_leader()
+                        if election_success is not True:
+                            # Error electing leader
+                            message = "Internal server error: leader unreachable, unable to elect leader: {}".format(
+                                e)
+                            package = {"error": message}
+                            response = json.dumps(package)
+
+                            self.send_response(500)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
+
                         if (node_self != node_leader):
                             leader_url = "http://" + node_leader + "/kv739/"
                             try:

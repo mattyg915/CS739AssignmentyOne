@@ -502,21 +502,37 @@ class HandleRequests(BaseHTTPRequestHandler):
                             self.wfile.write(response.encode())
                             return
                         new_millisec = int(body["millisec"])
+                    if result is not None:
+                        try:
+                            cursor.execute('''UPDATE 'records' SET value = ?, time = ? WHERE key = ?''',
+                                           (value, new_millisec, key))
+                            connection.commit()
+                        except Exception as e:
+                            message = "Internal server error: {}".format(e)
+                            package = {"error": message}
+                            response = json.dumps(package)
 
-                    try:
-                        cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, new_millisec))
-                        connection.commit()
-                    except Exception as e:
-                        message = "Internal server error: {}".format(e)
-                        package = {"error": message}
-                        response = json.dumps(package)
+                            self.send_response(500)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
+                            return
+                    else:
+                        try:
+                            cursor.execute('''INSERT INTO 'records' VALUES (?, ?, ?)''', (key, value, new_millisec))
+                            connection.commit()
+                        except Exception as e:
+                            message = "Internal server error: {}".format(e)
+                            package = {"error": message}
+                            response = json.dumps(package)
 
-                        self.send_response(500)
-                        self.send_header('Content-type', 'application/json')
-                        self.send_header("Content-Length", str(len(response)))
-                        self.end_headers()
-                        self.wfile.write(response.encode())
-                        return
+                            self.send_response(500)
+                            self.send_header('Content-type', 'application/json')
+                            self.send_header("Content-Length", str(len(response)))
+                            self.end_headers()
+                            self.wfile.write(response.encode())
+                            return
 
                 if result is not None:
                     package = {"exists": "yes", "former_value": result[0], "new_value": value}
